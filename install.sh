@@ -5,11 +5,10 @@ set -euo pipefail
 if [[ -t 1 ]]; then
   Red='\033[0;31m'
   Green='\033[0;32m'
-  Dim='\033[0;2m'
   Bold='\033[1m'
   Reset='\033[0m'
 else
-  Red='' Green='' Dim='' Bold='' Reset=''
+  Red='' Green='' Bold='' Reset=''
 fi
 
 info() { echo -e "${Green}bocek${Reset}: $*"; }
