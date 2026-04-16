@@ -1,0 +1,109 @@
+---
+interface Props {
+  /** The command to display and copy. */
+  command: string;
+  /** Optional label in the title bar. Defaults to a shell-ish prompt. */
+  title?: string;
+  /** Optional prompt glyph before the command. Set to null to hide. */
+  prompt?: string | null;
+}
+
+const { command, title = "~ — bocek", prompt = "$" } = Astro.props;
+---
+
+<div
+  class="group relative overflow-hidden rounded-xl border border-border/80 bg-card shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_20px_40px_-20px_rgba(0,0,0,0.6)]"
+>
+  <!-- Title bar -->
+  <div
+    class="flex items-center justify-between border-b border-border/60 bg-background-alt/60 px-4 py-2.5"
+  >
+    <div class="flex items-center gap-1.5">
+      <span class="h-2.5 w-2.5 rounded-full bg-[#ff5f57]/80"></span>
+      <span class="h-2.5 w-2.5 rounded-full bg-[#febc2e]/80"></span>
+      <span class="h-2.5 w-2.5 rounded-full bg-[#28c840]/80"></span>
+    </div>
+    <span class="font-heading text-[11px] tracking-tight text-muted-foreground">
+      {title}
+    </span>
+    <span class="w-[42px]"></span>
+  </div>
+
+  <!-- Command row -->
+  <div class="flex items-center gap-3 px-5 py-4">
+    {prompt !== null && (
+      <span class="select-none font-mono text-sm text-[color:var(--accent-amber)]">{prompt}</span>
+    )}
+    <code
+      data-terminal-command
+      class="flex-1 min-w-0 whitespace-pre-wrap break-all font-mono text-[13px] leading-relaxed text-foreground"
+    >
+      {command}
+    </code>
+    <button
+      data-terminal-copy
+      type="button"
+      aria-label="Copy command"
+      class="shrink-0 rounded-md border border-border/60 bg-background/40 p-1.5 text-muted-foreground transition-colors hover:border-border hover:bg-background hover:text-foreground focus:outline-none focus:ring-1 focus:ring-[color:var(--accent-amber)]"
+    >
+      <svg
+        data-icon-copy
+        xmlns="http://www.w3.org/2000/svg"
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+      </svg>
+      <svg
+        data-icon-check
+        xmlns="http://www.w3.org/2000/svg"
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        class="hidden text-[color:var(--accent-amber)]"
+      >
+        <path d="M20 6 9 17l-5-5"></path>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<script>
+  const blocks = document.querySelectorAll<HTMLElement>("[data-terminal-copy]");
+  blocks.forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const row = btn.parentElement;
+      const cmd = row?.querySelector<HTMLElement>("[data-terminal-command]");
+      if (!cmd) return;
+      const text = cmd.textContent?.trim() ?? "";
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        return;
+      }
+      const copy = btn.querySelector<SVGElement>("[data-icon-copy]");
+      const check = btn.querySelector<SVGElement>("[data-icon-check]");
+      if (!copy || !check) return;
+      copy.classList.add("hidden");
+      check.classList.remove("hidden");
+      window.setTimeout(() => {
+        copy.classList.remove("hidden");
+        check.classList.add("hidden");
+      }, 1400);
+    });
+  });
+</script>
