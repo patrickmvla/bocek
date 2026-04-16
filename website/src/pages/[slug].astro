@@ -1,0 +1,65 @@
+---
+import { getCollection, render } from "astro:content";
+import Base from "../layouts/Base.astro";
+
+export async function getStaticPaths() {
+  const pages = await getCollection("pages");
+  return pages.map((page) => ({
+    params: { slug: page.id },
+    props: { page },
+  }));
+}
+
+const { page } = Astro.props;
+const { Content } = await render(page);
+---
+
+<Base
+  title={`${page.data.title} — bocek`}
+  description={page.data.description}
+>
+  <div class="mx-auto max-w-3xl px-6 py-20">
+    <div class="mb-10 flex items-baseline gap-5">
+      <a
+        href="/"
+        class="font-heading text-[11px] uppercase tracking-[0.22em] text-muted-foreground transition-colors hover:text-foreground"
+        >&larr; home</a
+      >
+      <span class="h-px flex-1 bg-border/60"></span>
+      <span
+        class="font-heading text-[10px] uppercase tracking-[0.25em] text-[color:var(--accent-amber)]"
+        >{page.data.title.toLowerCase()}</span
+      >
+    </div>
+
+    <h1 class="font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
+      {page.data.title}
+    </h1>
+    {
+      page.data.subtitle && (
+        <p class="mt-4 font-sans text-lg leading-relaxed text-muted-foreground">
+          {page.data.subtitle}
+        </p>
+      )
+    }
+
+    <hr class="my-10 border-border/60" />
+
+    <article class="prose-bocek">
+      <Content />
+    </article>
+
+    {
+      page.data.next && (
+        <p class="mt-12">
+          <a
+            href={page.data.next.href}
+            class="font-heading text-xs tracking-tight text-foreground underline underline-offset-4 decoration-[color:var(--accent-amber)] hover:decoration-2"
+          >
+            {page.data.next.label} &rarr;
+          </a>
+        </p>
+      )
+    }
+  </div>
+</Base>

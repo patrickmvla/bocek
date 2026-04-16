@@ -1,0 +1,323 @@
+---
+import Base from "../layouts/Base.astro";
+import TerminalBlock from "../components/TerminalBlock.astro";
+import ChapterHeading from "../components/ChapterHeading.astro";
+import ModesTable from "../components/ModesTable.astro";
+import VaultCompare from "../components/VaultCompare.astro";
+
+const installCmd =
+  "curl -fsSL https://raw.githubusercontent.com/patrickmvla/bocek/main/install.sh | bash";
+---
+
+<Base title="bocek — engineering with evidence, not vibes">
+  <!-- Hero -->
+  <section class="relative overflow-hidden">
+    <div class="hero-wash pointer-events-none absolute inset-0"></div>
+    <div class="relative mx-auto max-w-5xl px-6 pt-20 pb-28 sm:pt-28 sm:pb-36">
+      <div class="mb-8 flex items-center gap-3">
+        <span
+          class="font-heading text-[10px] font-semibold uppercase tracking-[0.3em] text-[color:var(--accent-amber)]"
+          >bocek · v0</span
+        >
+        <span class="h-px w-12 bg-border"></span>
+        <span
+          class="font-heading text-[10px] uppercase tracking-[0.25em] text-muted-foreground"
+          >for claude code</span
+        >
+      </div>
+
+      <h1
+        class="font-heading text-4xl font-semibold tracking-tight text-foreground sm:text-6xl sm:leading-[1.05]"
+      >
+        The model is a dataset.
+        <br />
+        <span class="text-muted-foreground">Treat it like one.</span>
+      </h1>
+
+      <p
+        class="mt-8 max-w-2xl font-sans text-lg leading-relaxed text-muted-foreground"
+      >
+        Ask for output, you get the median of everything ever written. Ask for
+        evidence — then challenge it — and you get the best of a thousand
+        senior engineers, filtered through your judgment.
+      </p>
+
+      <div class="mt-10">
+        <TerminalBlock command={installCmd} title="~ — install bocek" />
+      </div>
+
+      <p
+        class="mt-4 font-mono text-[11px] tracking-tight text-muted-foreground"
+      >
+        requires <span class="text-foreground">git</span> ·
+        <span class="text-foreground">curl</span> ·
+        <span class="text-foreground">jq</span> — then
+        <code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground"
+          >bocek on</code
+        > in any project
+      </p>
+    </div>
+  </section>
+
+  <!-- 01 — the problem -->
+  <ChapterHeading
+    id="problem"
+    number="01"
+    title="The default output is mediocre by definition."
+    kicker="the problem"
+  >
+    <div class="space-y-6 text-base leading-relaxed text-muted-foreground">
+      <p>
+        An LLM is a prediction engine. It produces the most statistically likely
+        output given its training data. The majority of that training data is
+        mediocre code — Stack Overflow answers, tutorial projects, boilerplate
+        repos, average production codebases.
+      </p>
+      <p>
+        When you say <span class="text-foreground">"build me a checkout API,"</span>
+        the model doesn't think about your specific constraints. It produces the
+        average checkout API from its training data. That average includes every
+        shortcut, every missing edge case, every <span class="text-foreground"
+          >"good enough"</span
+        > decision from every codebase it's seen.
+      </p>
+
+      <blockquote
+        class="my-8 border-l-2 pl-6 font-heading text-lg leading-snug text-foreground"
+        style="border-left-color: var(--accent-amber);"
+      >
+        Every ungrounded decision makes the next decision worse — because the
+        model has less ground truth to reason from.
+      </blockquote>
+
+      <p>
+        By decision twenty, the inventory locking strategy was never chosen (it
+        defaulted to none), the error contract was never specified, the auth
+        token lifecycle was never designed. Every new feature interacts with
+        twenty unexamined assumptions. The model can't help, because the model
+        doesn't know which behaviors are intentional and which are accidents.
+      </p>
+    </div>
+  </ChapterHeading>
+
+  <!-- 02 — the shift -->
+  <ChapterHeading
+    id="shift"
+    number="02"
+    title="Ask for evidence, not output."
+    kicker="the shift"
+    variant="alt"
+  >
+    <div class="space-y-8 text-base leading-relaxed text-muted-foreground">
+      <p>
+        The model has read every architecture post-mortem, every scaling
+        failure, every production incident write-up. It knows how Stripe handles
+        idempotency. It knows why optimistic locking fails under flash-sale
+        conditions. But when you ask for output, it gives you the average — not
+        because it doesn't know better, but because you didn't ask for better.
+      </p>
+
+      <blockquote
+        class="my-8 border-l-2 pl-6 font-heading text-lg leading-snug text-foreground"
+        style="border-left-color: var(--accent-amber);"
+      >
+        Design tokens are investment tokens. Implementation tokens without
+        design are waste tokens.
+      </blockquote>
+
+      <div class="my-4 grid gap-px overflow-hidden rounded-lg border border-border/60 sm:grid-cols-2">
+        <div class="bg-background p-6">
+          <div class="mb-3 flex items-center gap-2">
+            <span class="h-1.5 w-1.5 rounded-full bg-muted-foreground/60"></span>
+            <span
+              class="font-heading text-[10px] uppercase tracking-[0.22em] text-muted-foreground"
+              >ungrounded ask</span
+            >
+          </div>
+          <p class="font-mono text-[13px] leading-relaxed text-muted-foreground">
+            "Build me a checkout API."
+          </p>
+          <p class="mt-3 text-xs leading-relaxed text-muted-foreground">
+            → median code from the training data
+          </p>
+        </div>
+        <div class="bg-background p-6">
+          <div class="mb-3 flex items-center gap-2">
+            <span
+              class="h-1.5 w-1.5 rounded-full bg-[color:var(--accent-amber)]"
+            ></span>
+            <span
+              class="font-heading text-[10px] uppercase tracking-[0.22em] text-[color:var(--accent-amber)]"
+              >grounded ask</span
+            >
+          </div>
+          <p class="font-mono text-[13px] leading-relaxed text-foreground">
+            "Show me how Stripe handles idempotency in their node SDK, then
+            challenge my approach to inventory locking."
+          </p>
+          <p class="mt-3 text-xs leading-relaxed text-muted-foreground">
+            → the best of the training data, filtered through your judgment
+          </p>
+        </div>
+      </div>
+
+      <p>
+        Stop treating the model as an executor. Start treating it as an evidence
+        source and an adversarial reviewer. You are the judge — you provide
+        taste, context, and the final call. The model presents evidence and
+        challenges it. When you override it, the vault records your reason.
+      </p>
+    </div>
+  </ChapterHeading>
+
+  <!-- 03 — the modes -->
+  <ChapterHeading
+    id="modes"
+    number="03"
+    title="Six modes. Each demands something from you."
+    kicker="the modes"
+  >
+    <p
+      class="mb-10 max-w-2xl text-base leading-relaxed text-muted-foreground"
+    >
+      Modes aren't features — they're contracts. The model doesn't accommodate
+      weak reasoning. It escalates.
+    </p>
+    <ModesTable />
+  </ChapterHeading>
+
+  <!-- 04 — enforcement -->
+  <ChapterHeading
+    id="enforcement"
+    number="04"
+    title="Three layers of defense. The first one costs zero tokens."
+    kicker="enforcement"
+    variant="alt"
+  >
+    <p class="mb-10 max-w-2xl text-base leading-relaxed text-muted-foreground">
+      Instructions degrade as context grows — context rot is structural, not a
+      bug. So Bocek doesn't trust the model's memory to enforce its own
+      contracts. Each layer catches what the previous misses.
+    </p>
+
+    <div class="divide-y divide-border/60 border-y border-border/60">
+      <div class="grid gap-4 py-7 sm:grid-cols-[9rem_1fr] sm:gap-10">
+        <div>
+          <div
+            class="font-heading text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:var(--accent-amber)]"
+          >
+            layer 01
+          </div>
+          <div class="mt-1 font-heading text-base font-semibold text-foreground">
+            the hook
+          </div>
+        </div>
+        <div class="space-y-3 text-sm leading-relaxed text-muted-foreground">
+          <p>
+            A bash script that runs outside the context window. It reads
+            <code
+              class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+              >.bocek/mode</code
+            > and blocks <code
+              class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+              >Edit</code
+            >, <code
+              class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+              >Write</code
+            >, and the Bash workarounds the model actually reaches for —
+            <code
+              class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+              >sed&nbsp;-i</code
+            >, <code
+              class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+              >python&nbsp;-c</code
+            >, shell redirects.
+          </p>
+          <p class="font-heading text-[11px] tracking-tight text-foreground">
+            zero tokens · non-bypassable · can't degrade
+          </p>
+        </div>
+      </div>
+
+      <div class="grid gap-4 py-7 sm:grid-cols-[9rem_1fr] sm:gap-10">
+        <div>
+          <div
+            class="font-heading text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:var(--accent-amber)]"
+          >
+            layer 02
+          </div>
+          <div class="mt-1 font-heading text-base font-semibold text-foreground">
+            the primitive
+          </div>
+        </div>
+        <div class="space-y-3 text-sm leading-relaxed text-muted-foreground">
+          <p>
+            An 800–2,000 token contract the model loads into context. It
+            specifies what the mode demands, how to calibrate response to the
+            human's reasoning, and when to stop and flag. Works while attention
+            holds — which is most of the time.
+          </p>
+          <p class="font-heading text-[11px] tracking-tight text-foreground">
+            in-context · degrades with length · catches what the hook can't
+          </p>
+        </div>
+      </div>
+
+      <div class="grid gap-4 py-7 sm:grid-cols-[9rem_1fr] sm:gap-10">
+        <div>
+          <div
+            class="font-heading text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:var(--accent-amber)]"
+          >
+            layer 03
+          </div>
+          <div class="mt-1 font-heading text-base font-semibold text-foreground">
+            session restart
+          </div>
+        </div>
+        <div class="space-y-3 text-sm leading-relaxed text-muted-foreground">
+          <p>
+            Your reset button. When context rots, start a fresh session.
+            <code
+              class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+              >state.md</code
+            > and the compiled vault mean the new session inherits every resolved
+            decision. Not a blank slate — a continuation.
+          </p>
+          <p class="font-heading text-[11px] tracking-tight text-foreground">
+            manual · full recovery · the vault is the memory
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <p class="mt-10 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+      Nothing registers at startup. No persona, no skills loaded, no always-on
+      instructions — every token in context is a token you chose to load.
+    </p>
+  </ChapterHeading>
+
+  <!-- 05 — the vault -->
+  <ChapterHeading
+    id="vault"
+    number="05"
+    title="The vault is the product. The code is downstream."
+    kicker="the vault"
+  >
+    <p class="mb-10 max-w-2xl text-base leading-relaxed text-muted-foreground">
+      Decisions, rejected alternatives, contracts, research — captured in
+      markdown, compiled for the model on demand. New sessions aren't blank
+      slates. They continue.
+    </p>
+
+    <VaultCompare />
+
+    <p class="mt-10 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+      Two formats, one direction. Obsidian-style markdown is the source of
+      truth; per-feature files are compiled lazily — only when implementation
+      mode needs them, only if the source has changed. No sync step. No stale
+      artifacts. The vault travels with the code.
+    </p>
+  </ChapterHeading>
+
+</Base>

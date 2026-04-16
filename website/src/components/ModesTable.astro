@@ -1,0 +1,97 @@
+---
+const modes = [
+  {
+    name: "design",
+    kind: "reasoning",
+    demand:
+      "Defend every decision. The model attacks its own recommendations harder than yours.",
+  },
+  {
+    name: "research",
+    kind: "reasoning",
+    demand:
+      "Clones real codebases, reads current docs, cross-checks academic sources. Evidence with conflicts built in — not summaries.",
+  },
+  {
+    name: "implementation",
+    kind: "code",
+    demand:
+      "Ship from a complete vault. Missing decisions stop the model — it won't improvise.",
+  },
+  {
+    name: "debugging",
+    kind: "code",
+    demand:
+      "Bring the stack trace. No vibes. Vault tells it what's designed vs. broken.",
+  },
+  {
+    name: "refactoring",
+    kind: "code",
+    demand:
+      "Code it can't explain doesn't get touched. If you can't either, the code stays.",
+  },
+  {
+    name: "review",
+    kind: "reasoning",
+    demand:
+      "Compare code to vault. Find where you drifted. Convenience is not an excuse.",
+  },
+];
+---
+
+<div class="overflow-hidden rounded-lg border border-border/60">
+  <table class="w-full border-collapse text-left text-sm">
+    <thead>
+      <tr class="bg-background-alt/60">
+        <th
+          scope="col"
+          class="w-[28%] border-b border-border/60 px-5 py-3 font-heading text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground"
+          >mode</th
+        >
+        <th
+          scope="col"
+          class="w-[14%] border-b border-border/60 px-5 py-3 font-heading text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground"
+          >kind</th
+        >
+        <th
+          scope="col"
+          class="border-b border-border/60 px-5 py-3 font-heading text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground"
+          >what it demands</th
+        >
+      </tr>
+    </thead>
+    <tbody>
+      {
+        modes.map((m, i) => (
+          <tr
+            class={
+              i < modes.length - 1
+                ? "border-b border-border/40 transition-colors hover:bg-background-alt/40"
+                : "transition-colors hover:bg-background-alt/40"
+            }
+          >
+            <td class="px-5 py-4 align-top">
+              <span class="font-heading text-sm font-semibold tracking-tight text-foreground">
+                {m.name}
+              </span>
+            </td>
+            <td class="px-5 py-4 align-top">
+              <span
+                class={`font-heading text-[10px] uppercase tracking-[0.2em] ${
+                  m.kind === "reasoning"
+                    ? "text-[color:var(--accent-amber)]"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {m.kind}
+              </span>
+            </td>
+            <td class="px-5 py-4 align-top text-sm leading-relaxed text-muted-foreground">
+              {m.demand}
+            </td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</div>

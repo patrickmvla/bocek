@@ -1,0 +1,66 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const {
+  title,
+  description = "A knowledge-grounded engineering methodology engine for AI-assisted development.",
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body class="min-h-screen bg-background text-foreground antialiased">
+    <header
+      class="sticky top-0 z-20 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+    >
+      <nav
+        class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4"
+      >
+        <a
+          href="/"
+          class="font-heading text-sm font-semibold tracking-tight text-foreground hover:text-foreground/80 transition-colors"
+        >
+          bocek
+        </a>
+        <div class="flex items-center gap-5 text-xs font-heading tracking-tight">
+          <a
+            href="/guide"
+            class="text-muted-foreground hover:text-foreground transition-colors"
+            >guide</a
+          >
+          <a
+            href="https://github.com/patrickmvla/bocek"
+            class="text-muted-foreground hover:text-foreground transition-colors"
+            >github &rarr;</a
+          >
+        </div>
+      </nav>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer class="border-t border-border/60">
+      <div
+        class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-8 text-xs font-heading text-muted-foreground"
+      >
+        <span>MIT License</span>
+        <a
+          href="https://github.com/patrickmvla/bocek"
+          class="hover:text-foreground transition-colors">github</a
+        >
+      </div>
+    </footer>
+  </body>
+</html>

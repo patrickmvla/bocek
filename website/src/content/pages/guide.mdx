@@ -1,0 +1,222 @@
+---
+title: Guide
+subtitle: How a Bocek session actually works, with a worked example.
+description: A walkthrough of a real Bocek session — design, vault, implementation — using the checkout example.
+order: 1
+---
+
+import TerminalBlock from "../../components/TerminalBlock.astro";
+
+## Before you read this
+
+This guide is not "how to install Bocek." That's two commands and it's at the end. This is what a session *feels* like — what you type, what the model does back, what ends up in the vault, and how the next session picks up where this one stopped.
+
+The worked example below adds a **checkout feature** to an imaginary e-commerce project. It's the same example the repo ships in `examples/vault/checkout/`, so you can compare the artifacts we describe here to the real files.
+
+---
+
+## The shape of a session
+
+Every session has three moving parts:
+
+1. **A primitive** loaded in Claude Code — the behavior contract (`design`, `research`, `implementation`, `debugging`, `refactoring`, `review`).
+2. **A mode file** on disk at `.bocek/mode` — which the enforcement hook reads on every tool call.
+3. **The vault** at `.bocek/vault/` — the accumulating record of decisions, research, and contracts.
+
+When you load a primitive, the mode file updates. When the model tries to write code in a reasoning mode, the hook blocks it — before the tool call reaches the model's context. Zero tokens spent on enforcement, zero chance of the model talking itself out of the rule.
+
+---
+
+## 1. Starting a design session
+
+You've just cloned an empty project. You want to design a checkout flow before writing a line of code.
+
+<TerminalBlock command="cd your-project && bocek on" title="~/your-project" />
+
+Open Claude Code in the same directory, then load the design primitive:
+
+```
+Read ~/.bocek/primitives/design.md and follow it.
+I'm designing a checkout flow. Start by forcing the hidden decisions.
+```
+
+The design primitive makes the model do something specific: it surfaces decisions you haven't made yet, takes a position with evidence, and attacks its own recommendation harder than yours. You don't drive — it drives.
+
+A real response from the design mode looks like this:
+
+> You said "checkout flow." That phrase carries at least six unmade decisions.
+> The first one that will hurt you is **inventory reservation timing**.
+>
+> You have three options. I'll take a position, then attack it:
+>
+> **Position:** reserve on add-to-cart, expire after 15 minutes.
+>
+> **Evidence:** Shopify's abandoned-cart data shows 68% of carts finish or abandon inside 12 minutes. Amazon does this too, with a shorter window.
+>
+> **Attack on my own position:** under flash-sale conditions, 15-minute holds on popular SKUs starve legitimate buyers. You'll see "out of stock" on items that nobody's actually buying — they're in dead carts.
+>
+> Before I record anything: what's your write volume under peak load, and do you have flash-sale traffic? If you don't know, we need to decide on a reservation strategy that degrades gracefully across both regimes.
+
+You answer honestly. The model either accepts and writes the decision to the vault, or it escalates and demands more defense. Confident-but-wrong gets attacked. Honestly-uncertain gets helped.
+
+---
+
+## 2. What ends up in the vault
+
+When a decision survives scrutiny, the model writes a file like `.bocek/vault/checkout/optimistic-locking.md`:
+
+```markdown
+---
+type: decision
+feature: checkout
+status: resolved
+date: 2026-04-16
+tags: [inventory, concurrency]
+---
+
+# Optimistic locking for inventory decrement
+
+## Chosen
+Optimistic locking with retry on conflict. Reservation window: 15 min.
+
+## Rejected
+- Pessimistic row-level lock — blocks during external Stripe call,
+  degrades under flash sales.
+- No lock + reconcile — acceptable for low-volume, breaks the moment
+  concurrent checkouts exceed write throughput.
+
+## Rationale
+Write volume is <50 writes/sec steady-state, no flash-sale roadmap
+in the next two quarters. Conflict rate projected <2%, retry cost
+is cheap.
+
+## Revisit when
+- Flash-sale feature gets scoped
+- Sustained write volume exceeds 200/sec
+- Conflict rate observed above 5%
+```
+
+The human layer is Obsidian-style markdown. You read it in a PR. You link decisions with wikilinks. You don't hand-write any of this — the model writes it under your direction and you review it before the session ends.
+
+### What the vault looks like on disk
+
+After a few sessions on a feature, `.bocek/` in your project root looks like this:
+
+```
+.bocek/
+├── mode                          ← current mode: idle|design|research|…
+├── state.md                      ← active feature, last decision, next question
+└── vault/
+    ├── index.md                  ← LLM entry point, auto-maintained
+    ├── .compiled/                ← gitignored, regenerated on demand
+    │   ├── checkout.md
+    │   └── auth.md
+    ├── checkout/                 ← optional feature grouping
+    │   ├── cart-expiry.md                 (decision)
+    │   ├── optimistic-locking.md          (decision)
+    │   ├── stripe-idempotency-research.md (research)
+    │   └── checkout-api-contract.md       (contract)
+    ├── auth/
+    │   └── session-format.md              (decision)
+    └── inventory-locking-patterns.md      ← cross-feature entry, vault root
+```
+
+A few things worth knowing:
+
+- **Feature folders are optional.** Files that span multiple features live at the vault root. The wikilink graph matters more than the folder tree.
+- **`.compiled/` is never hand-edited.** Implementation mode regenerates it from the human files when anything upstream has changed.
+- **`mode` and `state.md` sit one level up**, outside `vault/`. They're session state — not knowledge the vault is supposed to preserve.
+- **Commit `vault/`. Ignore `.compiled/`.** The `.gitignore` entry is added automatically the first time the vault is created.
+
+---
+
+## 3. Switching to research mid-flow
+
+Mid-session you realize you don't actually know how Stripe handles idempotency. Switch primitives without ending the session:
+
+```
+Read ~/.bocek/primitives/research.md and follow it.
+Cite how Stripe handles idempotency in their node SDK. Find conflicts
+between their docs and their actual code.
+```
+
+Research mode will clone the real SDK, read the real docs, and produce an evidence package with citations and conflicts built in — not a summary, not an endorsement. It writes the findings to `.bocek/vault/checkout/stripe-idempotency-research.md`.
+
+When the research is done, switch back to design and resume:
+
+```
+Read ~/.bocek/primitives/design.md and follow it.
+Resume. Latest decision was [[cart-expiry]]. Next: payment-success
+but order-creation-failure scenario.
+```
+
+Nothing's lost — `.bocek/state.md` tracks session continuity across restarts. A fresh Claude Code session can read it and pick up where you left off.
+
+---
+
+## 4. From design to implementation
+
+When the vault is complete enough to ship, compile it:
+
+<TerminalBlock command="bocek vault compile checkout" title="~/your-project" />
+
+Compilation produces a per-feature structured file optimized for the model: constraints with rationale, contracts with type signatures, cross-feature dependencies. Regenerated on demand — you never hand-edit the compiled layer.
+
+Then swap to implementation:
+
+```
+Read ~/.bocek/primitives/implementation.md and follow it.
+Read the compiled vault for checkout. Implement the API.
+```
+
+Implementation mode enforces a simple rule: **every function starts with a quote from the vault contract it satisfies.** If a decision is missing, the model stops and tells you. It will not improvise. The enforcement hook will not let it write source files until a code mode is loaded.
+
+---
+
+## 5. When to switch modes
+
+| You want to…                                    | Load                                 |
+| ------------------------------------------------ | ------------------------------------ |
+| Decide an approach                               | `design`                             |
+| Get evidence from real code or docs              | `research`                           |
+| Ship code against a complete vault               | `implementation`                     |
+| Investigate a failure with a stack trace         | `debugging`                          |
+| Restructure code without changing behavior       | `refactoring`                        |
+| Check your code against your vault decisions     | `review`                             |
+
+Switch by loading a different primitive. There's no "end session" step — the mode file is the session state, and it lives on disk.
+
+---
+
+## 6. The commands you'll actually run
+
+| Command        | What it does                                           |
+| -------------- | ------------------------------------------------------ |
+| `bocek on`     | Register enforcement hooks in this project             |
+| `bocek off`    | Remove hooks from this project                         |
+| `bocek status` | Show hook, mode, vault, and primitive state            |
+| `bocek update` | Pull the latest primitives and scripts                 |
+
+That's the whole CLI. Everything else happens in Claude Code.
+
+---
+
+## Removing Bocek
+
+Bocek lives in three places. Clean removal takes three steps, in this order.
+
+**1. Turn it off in every project that has it on.** Per-project hooks live in `.claude/settings.local.json`. `bocek off` removes the hook entry and leaves a `.bocek-backup` of the previous settings next to it.
+
+<TerminalBlock command="cd your-project && bocek off" title="~/your-project" />
+
+Repeat in every project where you ran `bocek on`. If you're not sure which projects are wired up, this one-liner surfaces them:
+
+<TerminalBlock command="grep -rl 'enforce-mode.sh' ~ --include='settings.local.json' 2>/dev/null" title="~" prompt="$" />
+
+**2. Remove the install directory.** This deletes the primitives, the toggle script, and the enforcement hook binary.
+
+<TerminalBlock command="rm -rf ~/.bocek" title="~" prompt="$" />
+
+**3. Remove the shell hook.** The installer added two lines to your shell config (`~/.zshrc`, `~/.bashrc`, or `~/.profile`) — a `# bocek` marker and an `export PATH=...` line. Delete both, then restart your shell.
+
+Your vaults under `.bocek/vault/` inside individual projects are not touched — they're part of the project, not the install. Remove them manually if you want them gone.

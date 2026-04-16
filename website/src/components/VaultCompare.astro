@@ -1,0 +1,44 @@
+---
+---
+
+<div class="grid gap-10 sm:grid-cols-2 sm:gap-0">
+  <!-- Without -->
+  <div class="sm:border-r sm:border-border/60 sm:pr-8">
+    <div class="mb-4 flex items-center gap-2">
+      <span class="h-1.5 w-1.5 rounded-full bg-muted-foreground/60"></span>
+      <span
+        class="font-heading text-[10px] font-semibold uppercase tracking-[0.25em] text-muted-foreground"
+        >without a vault</span
+      >
+    </div>
+    <p class="mb-4 text-sm leading-relaxed text-muted-foreground">
+      Three months in. You ask the model to add a feature. It doesn't know auth
+      is JWT with 15-minute expiry. It generates session-based auth. Now the
+      project has two auth systems. Nobody knows why.
+    </p>
+    <p class="text-sm leading-relaxed text-muted-foreground">
+      Every session starts from zero. Every decision gets re-made. The codebase
+      accumulates contradictions.
+    </p>
+  </div>
+
+  <!-- With -->
+  <div class="sm:pl-8">
+    <div class="mb-4 flex items-center gap-2">
+      <span class="h-1.5 w-1.5 rounded-full bg-[color:var(--accent-amber)]"></span>
+      <span
+        class="font-heading text-[10px] font-semibold uppercase tracking-[0.25em] text-[color:var(--accent-amber)]"
+        >with a vault</span
+      >
+    </div>
+    <p class="mb-4 text-sm leading-relaxed text-foreground">
+      Same point in time. You load the implementation primitive. The model reads
+      the compiled vault. It knows auth uses JWT, knows the API contract, knows
+      optimistic locking was chosen because write volume is low.
+    </p>
+    <p class="text-sm leading-relaxed text-foreground">
+      It implements the feature within those constraints. Every line traces to a
+      decision. New sessions aren't blank slates — they're continuations.
+    </p>
+  </div>
+</div>
