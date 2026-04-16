@@ -1,0 +1,22 @@
+# Bocek project-level ignores (ADR-0023)
+.bocek/vault/.compiled/
+.bocek/mode
+
+# Claude Code local settings
+.claude/settings.local.json
+.claude/settings.local.json.bocek-backup
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (website)
+node_modules/
+dist/
+.astro/
+.vercel/
+
+# Misc
+*.swp
+*.swo
+*~
