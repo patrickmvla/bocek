@@ -1,0 +1,212 @@
+#!/bin/bash
+# Bocek toggle script — registers/removes enforcement hooks in Claude Code settings
+set -euo pipefail
+
+# --- Dependencies ---
+command -v jq >/dev/null 2>&1 || { echo "bocek requires jq. Install: brew install jq (mac) or apt install jq (linux)" >&2; exit 1; }
+
+# --- Project root detection ---
+find_project_root() {
+  local dir="$PWD"
+  while [ "$dir" != "/" ]; do
+    if [ -d "$dir/.git" ]; then
+      echo "$dir"
+      return
+    fi
+    dir=$(dirname "$dir")
+  done
+  echo "$PWD"
+}
+
+PROJECT_ROOT=$(find_project_root)
+
+# --- Commands ---
+
+cmd_on() {
+  local SETTINGS_FILE="$PROJECT_ROOT/.claude/settings.local.json"
+
+  # Ensure .claude/ directory exists
+  mkdir -p "$PROJECT_ROOT/.claude"
+
+  # Read existing settings or default to empty object
+  local CURRENT='{}'
+  if [ -f "$SETTINGS_FILE" ]; then
+    CURRENT=$(cat "$SETTINGS_FILE")
+  fi
+
+  # Backup before modifying
+  if [ -f "$SETTINGS_FILE" ]; then
+    cp "$SETTINGS_FILE" "${SETTINGS_FILE}.bocek-backup"
+  fi
+
+  # Merge Bocek hook entry (idempotent)
+  local BOCEK_HOOK='{
+    "hooks": {
+      "PreToolUse": [
+        {
+          "matcher": "Edit|Write|Bash",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "~/.bocek/scripts/enforce-mode.sh",
+              "timeout": 5
+            }
+          ]
+        }
+      ]
+    }
+  }'
+
+  local MERGED
+  MERGED=$(echo "$CURRENT" | jq --argjson bocek "$BOCEK_HOOK" '
+    . as $base |
+    $bocek.hooks.PreToolUse[0] as $new_hook |
+    if ($base.hooks.PreToolUse // [] | map(select(.hooks[0].command == "~/.bocek/scripts/enforce-mode.sh")) | length) > 0
+    then $base
+    else
+      $base * { hooks: { PreToolUse: (($base.hooks.PreToolUse // []) + [$new_hook]) } }
+    end
+  ')
+
+  # Validate before writing
+  if echo "$MERGED" | jq '.' > /dev/null 2>&1; then
+    echo "$MERGED" | jq '.' > "$SETTINGS_FILE"
+  else
+    echo "bocek: ERROR — generated invalid JSON. Settings not modified." >&2
+    echo "bocek: backup preserved at ${SETTINGS_FILE}.bocek-backup" >&2
+    exit 1
+  fi
+
+  # Create mode file if it doesn't exist
+  mkdir -p "$PROJECT_ROOT/.bocek"
+  if [ ! -f "$PROJECT_ROOT/.bocek/mode" ]; then
+    echo "idle" > "$PROJECT_ROOT/.bocek/mode"
+  fi
+
+  # Ensure gitignore covers settings.local.json
+  if [ -f "$PROJECT_ROOT/.gitignore" ]; then
+    grep -q "settings.local.json" "$PROJECT_ROOT/.gitignore" || echo ".claude/settings.local.json" >> "$PROJECT_ROOT/.gitignore"
+  fi
+
+  echo "bocek: hooks registered."
+  echo "bocek: mode set to $(cat "$PROJECT_ROOT/.bocek/mode"). Load a primitive to begin."
+}
+
+cmd_off() {
+  local SETTINGS_FILE="$PROJECT_ROOT/.claude/settings.local.json"
+
+  if [ ! -f "$SETTINGS_FILE" ]; then
+    echo "bocek: no settings.local.json found. Nothing to remove."
+    exit 0
+  fi
+
+  # Backup before modifying
+  cp "$SETTINGS_FILE" "${SETTINGS_FILE}.bocek-backup"
+
+  # Remove Bocek hook entry, preserve everything else
+  local CLEANED
+  CLEANED=$(cat "$SETTINGS_FILE" | jq '
+    if .hooks.PreToolUse then
+      .hooks.PreToolUse |= map(select(.hooks[0].command != "~/.bocek/scripts/enforce-mode.sh"))
+      | if (.hooks.PreToolUse | length) == 0 then del(.hooks.PreToolUse) else . end
+      | if (.hooks | length) == 0 then del(.hooks) else . end
+    else . end
+  ')
+
+  # If result is empty object, delete the file
+  if [ "$(echo "$CLEANED" | jq 'length')" -eq 0 ]; then
+    rm "$SETTINGS_FILE"
+    echo "bocek: hooks removed. settings.local.json deleted (was empty)."
+  else
+    echo "$CLEANED" | jq '.' > "$SETTINGS_FILE"
+    echo "bocek: hooks removed. Other settings preserved."
+  fi
+}
+
+cmd_status() {
+  echo "=== Bocek Status ==="
+
+  # Check hook registration
+  local SETTINGS_FILE="$PROJECT_ROOT/.claude/settings.local.json"
+  if [ -f "$SETTINGS_FILE" ] && jq -e '.hooks.PreToolUse[] | select(.hooks[0].command == "~/.bocek/scripts/enforce-mode.sh")' "$SETTINGS_FILE" >/dev/null 2>&1; then
+    echo "Hooks: registered"
+  else
+    echo "Hooks: not registered (run 'bocek on')"
+  fi
+
+  # Check current mode
+  local MODE_FILE="$PROJECT_ROOT/.bocek/mode"
+  if [ -f "$MODE_FILE" ]; then
+    echo "Mode: $(cat "$MODE_FILE")"
+  else
+    echo "Mode: no mode file"
+  fi
+
+  # Check vault state
+  local VAULT_DIR="$PROJECT_ROOT/.bocek/vault"
+  if [ -d "$VAULT_DIR" ]; then
+    local ENTRY_COUNT
+    ENTRY_COUNT=$(find "$VAULT_DIR" -name "*.md" -not -path "*/.compiled/*" | wc -l)
+    echo "Vault: $ENTRY_COUNT entries"
+    if [ -f "$VAULT_DIR/index.md" ]; then
+      local VERSION
+      VERSION=$(grep "vault_version" "$VAULT_DIR/index.md" | head -1 | grep -o "[0-9]*")
+      echo "Vault version: ${VERSION:-unknown}"
+    fi
+  else
+    echo "Vault: not initialized"
+  fi
+
+  # Check primitives
+  local PRIMITIVES_DIR="$HOME/.bocek/primitives"
+  if [ -d "$PRIMITIVES_DIR" ]; then
+    local PRIM_COUNT
+    PRIM_COUNT=$(find "$PRIMITIVES_DIR" -maxdepth 1 -name "*.md" | wc -l)
+    echo "Primitives: $PRIM_COUNT installed at $PRIMITIVES_DIR"
+  else
+    echo "Primitives: not installed (run 'bocek update' or reinstall)"
+  fi
+}
+
+cmd_update() {
+  local PRIMITIVES_DIR="$HOME/.bocek/primitives"
+
+  if [ ! -d "$PRIMITIVES_DIR/.git" ]; then
+    echo "bocek: primitives directory is not a git repo. Reinstall bocek." >&2
+    exit 1
+  fi
+
+  cd "$PRIMITIVES_DIR"
+  if git pull --ff-only 2>&1; then
+    # Re-copy scripts after update
+    cp scripts/bocek "$HOME/.bocek/bin/bocek"
+    cp scripts/enforce-mode.sh "$HOME/.bocek/scripts/enforce-mode.sh"
+    chmod +x "$HOME/.bocek/bin/bocek"
+    chmod +x "$HOME/.bocek/scripts/enforce-mode.sh"
+    echo "bocek: primitives and scripts updated."
+  else
+    echo "bocek: update failed. Check network and try again." >&2
+    exit 1
+  fi
+}
+
+# --- Usage ---
+usage() {
+  echo "Usage: bocek <command>"
+  echo ""
+  echo "Commands:"
+  echo "  on       Register Bocek hooks in this project"
+  echo "  off      Remove Bocek hooks from this project"
+  echo "  status   Show Bocek status for this project"
+  echo "  update   Update primitives and scripts from remote"
+  echo ""
+}
+
+# --- Dispatch ---
+case "${1:-}" in
+  on)     cmd_on ;;
+  off)    cmd_off ;;
+  status) cmd_status ;;
+  update) cmd_update ;;
+  *)      usage; exit 1 ;;
+esac
