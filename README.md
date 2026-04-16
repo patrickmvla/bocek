@@ -17,7 +17,7 @@ For engineers who want to use the model as a reasoning amplifier instead of a co
 ## Install
 
 ```bash
-curl -fsSL bocek.dev/install | bash
+curl -fsSL https://raw.githubusercontent.com/patrickmvla/bocek/main/install.sh | bash
 ```
 
 Requires: git, curl, jq.
