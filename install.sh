@@ -23,30 +23,69 @@ command -v jq >/dev/null 2>&1 || error "jq is required. Install: brew install jq
 BOCEK_HOME="$HOME/.bocek"
 BIN_DIR="$BOCEK_HOME/bin"
 SCRIPTS_DIR="$BOCEK_HOME/scripts"
-PRIMITIVES_DIR="$BOCEK_HOME/primitives"
+REPO_DIR="$BOCEK_HOME/.repo"
+LINKED_DIRS=(primitives references mental-models)
 
 mkdir -p "$BIN_DIR" "$SCRIPTS_DIR"
 
-# --- 3. Clone or update primitives ---
-REPO_URL="https://github.com/patrickmvla/bocek.git"
-
-if [ -d "$PRIMITIVES_DIR/.git" ]; then
-  info "Primitives already installed, updating..."
-  cd "$PRIMITIVES_DIR" && git pull --ff-only 2>/dev/null || info "Update failed, using existing primitives"
-else
-  info "Cloning primitives..."
-  git clone --depth 1 "$REPO_URL" "$PRIMITIVES_DIR" || error "Failed to clone primitives"
+# --- 2b. Migrate legacy layout (~/.bocek/primitives was the full repo) ---
+# Old installs cloned the repo into ~/.bocek/primitives, which made content resolve
+# to ~/.bocek/primitives/primitives/ (double-nested). If we see that shape, relocate.
+if [ -d "$BOCEK_HOME/primitives/.git" ] && [ ! -L "$BOCEK_HOME/primitives" ]; then
+  info "Migrating legacy install layout (~/.bocek/primitives → ~/.bocek/.repo)..."
+  rm -rf "$REPO_DIR"
+  mv "$BOCEK_HOME/primitives" "$REPO_DIR"
+  # Remove any plain (non-symlink) content dirs that would block symlinking below.
+  for d in "${LINKED_DIRS[@]}"; do
+    if [ -e "$BOCEK_HOME/$d" ] && [ ! -L "$BOCEK_HOME/$d" ]; then
+      rm -rf "$BOCEK_HOME/$d"
+    fi
+  done
 fi
 
-# --- 4. Copy toggle script ---
-cp "$PRIMITIVES_DIR/scripts/bocek" "$BIN_DIR/bocek" || error "Failed to copy toggle script"
+# --- 3. Clone or update the repo ---
+REPO_URL="https://github.com/patrickmvla/bocek.git"
 
-# --- 5. Copy enforcement script ---
-cp "$PRIMITIVES_DIR/scripts/enforce-mode.sh" "$SCRIPTS_DIR/enforce-mode.sh" || error "Failed to copy enforcement script"
+if [ -d "$REPO_DIR/.git" ]; then
+  info "Repo already cloned, updating..."
+  cd "$REPO_DIR" && git pull --ff-only 2>/dev/null || info "Update failed, using existing checkout"
+else
+  info "Cloning bocek..."
+  git clone --depth 1 "$REPO_URL" "$REPO_DIR" || error "Failed to clone repo"
+fi
+
+# --- 3b. Symlink content dirs into ~/.bocek/ ---
+for d in "${LINKED_DIRS[@]}"; do
+  target="$REPO_DIR/$d"
+  link="$BOCEK_HOME/$d"
+  if [ ! -d "$target" ]; then
+    error "Expected $target in the repo but it's missing — refusing to link a broken path."
+  fi
+  # Replace stale symlink or file; leave correct symlinks alone.
+  if [ -L "$link" ]; then
+    current=$(readlink "$link")
+    if [ "$current" != "$target" ]; then
+      rm "$link"
+      ln -s "$target" "$link"
+    fi
+  elif [ -e "$link" ]; then
+    error "$link exists and is not a symlink. Move or remove it, then re-run install."
+  else
+    ln -s "$target" "$link"
+  fi
+done
+
+# --- 4. Copy toggle script ---
+cp "$REPO_DIR/scripts/bocek" "$BIN_DIR/bocek" || error "Failed to copy toggle script"
+
+# --- 5. Copy hook scripts ---
+cp "$REPO_DIR/scripts/enforce-mode.sh" "$SCRIPTS_DIR/enforce-mode.sh" || error "Failed to copy enforcement script"
+cp "$REPO_DIR/scripts/session-banner.sh" "$SCRIPTS_DIR/session-banner.sh" || error "Failed to copy session banner script"
 
 # --- 6. Set permissions ---
 chmod +x "$BIN_DIR/bocek"
 chmod +x "$SCRIPTS_DIR/enforce-mode.sh"
+chmod +x "$SCRIPTS_DIR/session-banner.sh"
 
 # --- 7. PATH configuration ---
 if command -v bocek >/dev/null 2>&1; then
@@ -106,6 +145,5 @@ else
 fi
 echo "  2. Navigate to a project: cd your-project"
 echo "  3. Activate Bocek: bocek on"
-echo "  4. Start Claude Code and load a primitive:"
-echo "     \"Read ~/.bocek/primitives/design.md and follow it\""
+echo "  4. Start Claude Code and run a slash command: /design, /research, /implementation, /debugging, /refactoring, or /review"
 echo ""

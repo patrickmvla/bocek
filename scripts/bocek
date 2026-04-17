@@ -20,13 +20,20 @@ find_project_root() {
 
 PROJECT_ROOT=$(find_project_root)
 
+PRIMITIVES=(design research implementation debugging refactoring review)
+MANAGED_MARKER="<!-- bocek:managed -->"
+ENFORCE_CMD="~/.bocek/scripts/enforce-mode.sh"
+BANNER_CMD="~/.bocek/scripts/session-banner.sh"
+
 # --- Commands ---
 
 cmd_on() {
   local SETTINGS_FILE="$PROJECT_ROOT/.claude/settings.local.json"
+  local COMMANDS_DIR="$PROJECT_ROOT/.claude/commands"
 
   # Ensure .claude/ directory exists
   mkdir -p "$PROJECT_ROOT/.claude"
+  mkdir -p "$COMMANDS_DIR"
 
   # Read existing settings or default to empty object
   local CURRENT='{}'
@@ -39,33 +46,26 @@ cmd_on() {
     cp "$SETTINGS_FILE" "${SETTINGS_FILE}.bocek-backup"
   fi
 
-  # Merge Bocek hook entry (idempotent)
-  local BOCEK_HOOK='{
-    "hooks": {
-      "PreToolUse": [
-        {
-          "matcher": "Edit|Write|Bash",
-          "hooks": [
-            {
-              "type": "command",
-              "command": "~/.bocek/scripts/enforce-mode.sh",
-              "timeout": 5
-            }
-          ]
-        }
-      ]
-    }
-  }'
+  # Merge Bocek hook entries (idempotent) — PreToolUse enforcement + SessionStart banner
+  local BOCEK_HOOKS
+  BOCEK_HOOKS=$(jq -n --arg enforce "$ENFORCE_CMD" --arg banner "$BANNER_CMD" '{
+    pre: { matcher: "Edit|Write|Bash", hooks: [ { type: "command", command: $enforce, timeout: 5 } ] },
+    start: { hooks: [ { type: "command", command: $banner, timeout: 5 } ] }
+  }')
 
   local MERGED
-  MERGED=$(echo "$CURRENT" | jq --argjson bocek "$BOCEK_HOOK" '
-    . as $base |
-    $bocek.hooks.PreToolUse[0] as $new_hook |
-    if ($base.hooks.PreToolUse // [] | map(select(.hooks[0].command == "~/.bocek/scripts/enforce-mode.sh")) | length) > 0
-    then $base
-    else
-      $base * { hooks: { PreToolUse: (($base.hooks.PreToolUse // []) + [$new_hook]) } }
-    end
+  MERGED=$(echo "$CURRENT" | jq --argjson bocek "$BOCEK_HOOKS" --arg enforce "$ENFORCE_CMD" --arg banner "$BANNER_CMD" '
+    . as $base
+    | ($base.hooks // {}) as $h
+    | ($h.PreToolUse // []) as $pre
+    | ($h.SessionStart // []) as $start
+    | (if ($pre | map(select(.hooks[0].command == $enforce)) | length) > 0
+       then $pre
+       else $pre + [$bocek.pre] end) as $pre2
+    | (if ($start | map(select(.hooks[0].command == $banner)) | length) > 0
+       then $start
+       else $start + [$bocek.start] end) as $start2
+    | $base * { hooks: ($h + { PreToolUse: $pre2, SessionStart: $start2 }) }
   ')
 
   # Validate before writing
@@ -76,6 +76,24 @@ cmd_on() {
     echo "bocek: backup preserved at ${SETTINGS_FILE}.bocek-backup" >&2
     exit 1
   fi
+
+  # Write slash commands (idempotent). Only overwrite files we manage; warn on conflicts.
+  local skipped=()
+  for p in "${PRIMITIVES[@]}"; do
+    local cmd_file="$COMMANDS_DIR/$p.md"
+    if [ -f "$cmd_file" ] && ! head -n 1 "$cmd_file" | grep -q "$MANAGED_MARKER"; then
+      skipped+=("$p")
+      continue
+    fi
+    cat > "$cmd_file" <<EOF
+$MANAGED_MARKER
+---
+description: Load the Bocek $p primitive and enter $p mode
+---
+
+Read ~/.bocek/primitives/$p.md and follow it.
+EOF
+  done
 
   # Create mode file if it doesn't exist
   mkdir -p "$PROJECT_ROOT/.bocek"
@@ -88,29 +106,55 @@ cmd_on() {
     grep -q "settings.local.json" "$PROJECT_ROOT/.gitignore" || echo ".claude/settings.local.json" >> "$PROJECT_ROOT/.gitignore"
   fi
 
-  echo "bocek: hooks registered."
-  echo "bocek: mode set to $(cat "$PROJECT_ROOT/.bocek/mode"). Load a primitive to begin."
+  echo "bocek: hooks registered (PreToolUse enforcement + SessionStart banner)."
+  echo "bocek: slash commands installed at .claude/commands/ — /design, /research, /implementation, /debugging, /refactoring, /review"
+  if [ "${#skipped[@]}" -gt 0 ]; then
+    echo "bocek: skipped pre-existing unmanaged commands: ${skipped[*]} (remove them and re-run 'bocek on' to install)"
+  fi
+  echo "bocek: mode set to $(cat "$PROJECT_ROOT/.bocek/mode"). Use a slash command in Claude Code to load a primitive."
 }
 
 cmd_off() {
   local SETTINGS_FILE="$PROJECT_ROOT/.claude/settings.local.json"
+  local COMMANDS_DIR="$PROJECT_ROOT/.claude/commands"
+
+  # Remove Bocek-managed slash commands (only ones carrying the marker)
+  local removed=()
+  if [ -d "$COMMANDS_DIR" ]; then
+    for p in "${PRIMITIVES[@]}"; do
+      local cmd_file="$COMMANDS_DIR/$p.md"
+      if [ -f "$cmd_file" ] && head -n 1 "$cmd_file" | grep -q "$MANAGED_MARKER"; then
+        rm "$cmd_file"
+        removed+=("$p")
+      fi
+    done
+    # Clean up empty commands dir
+    rmdir "$COMMANDS_DIR" 2>/dev/null || true
+  fi
 
   if [ ! -f "$SETTINGS_FILE" ]; then
-    echo "bocek: no settings.local.json found. Nothing to remove."
+    if [ "${#removed[@]}" -gt 0 ]; then
+      echo "bocek: slash commands removed: ${removed[*]}"
+    fi
+    echo "bocek: no settings.local.json found. Nothing else to remove."
     exit 0
   fi
 
   # Backup before modifying
   cp "$SETTINGS_FILE" "${SETTINGS_FILE}.bocek-backup"
 
-  # Remove Bocek hook entry, preserve everything else
+  # Remove Bocek hook entries, preserve everything else
   local CLEANED
-  CLEANED=$(cat "$SETTINGS_FILE" | jq '
-    if .hooks.PreToolUse then
-      .hooks.PreToolUse |= map(select(.hooks[0].command != "~/.bocek/scripts/enforce-mode.sh"))
+  CLEANED=$(cat "$SETTINGS_FILE" | jq --arg enforce "$ENFORCE_CMD" --arg banner "$BANNER_CMD" '
+    (if .hooks.PreToolUse then
+      .hooks.PreToolUse |= map(select(.hooks[0].command != $enforce))
       | if (.hooks.PreToolUse | length) == 0 then del(.hooks.PreToolUse) else . end
-      | if (.hooks | length) == 0 then del(.hooks) else . end
-    else . end
+    else . end)
+    | (if .hooks.SessionStart then
+        .hooks.SessionStart |= map(select(.hooks[0].command != $banner))
+        | if (.hooks.SessionStart | length) == 0 then del(.hooks.SessionStart) else . end
+      else . end)
+    | if (.hooks // {} | length) == 0 then del(.hooks) else . end
   ')
 
   # If result is empty object, delete the file
@@ -121,6 +165,10 @@ cmd_off() {
     echo "$CLEANED" | jq '.' > "$SETTINGS_FILE"
     echo "bocek: hooks removed. Other settings preserved."
   fi
+
+  if [ "${#removed[@]}" -gt 0 ]; then
+    echo "bocek: slash commands removed: ${removed[*]}"
+  fi
 }
 
 cmd_status() {
@@ -128,11 +176,32 @@ cmd_status() {
 
   # Check hook registration
   local SETTINGS_FILE="$PROJECT_ROOT/.claude/settings.local.json"
-  if [ -f "$SETTINGS_FILE" ] && jq -e '.hooks.PreToolUse[] | select(.hooks[0].command == "~/.bocek/scripts/enforce-mode.sh")' "$SETTINGS_FILE" >/dev/null 2>&1; then
-    echo "Hooks: registered"
+  local has_enforce=0 has_banner=0
+  if [ -f "$SETTINGS_FILE" ]; then
+    jq -e --arg cmd "$ENFORCE_CMD" '.hooks.PreToolUse[]? | select(.hooks[0].command == $cmd)' "$SETTINGS_FILE" >/dev/null 2>&1 && has_enforce=1
+    jq -e --arg cmd "$BANNER_CMD"  '.hooks.SessionStart[]? | select(.hooks[0].command == $cmd)' "$SETTINGS_FILE" >/dev/null 2>&1 && has_banner=1
+  fi
+  if [ "$has_enforce" -eq 1 ] && [ "$has_banner" -eq 1 ]; then
+    echo "Hooks: registered (enforcement + banner)"
+  elif [ "$has_enforce" -eq 1 ]; then
+    echo "Hooks: enforcement only (run 'bocek on' to install banner)"
+  elif [ "$has_banner" -eq 1 ]; then
+    echo "Hooks: banner only (run 'bocek on' to install enforcement)"
   else
     echo "Hooks: not registered (run 'bocek on')"
   fi
+
+  # Check slash commands
+  local COMMANDS_DIR="$PROJECT_ROOT/.claude/commands"
+  local cmd_count=0
+  if [ -d "$COMMANDS_DIR" ]; then
+    for p in "${PRIMITIVES[@]}"; do
+      if [ -f "$COMMANDS_DIR/$p.md" ] && head -n 1 "$COMMANDS_DIR/$p.md" | grep -q "$MANAGED_MARKER"; then
+        cmd_count=$((cmd_count + 1))
+      fi
+    done
+  fi
+  echo "Slash commands: $cmd_count / ${#PRIMITIVES[@]} installed"
 
   # Check current mode
   local MODE_FILE="$PROJECT_ROOT/.bocek/mode"
@@ -161,28 +230,40 @@ cmd_status() {
   local PRIMITIVES_DIR="$HOME/.bocek/primitives"
   if [ -d "$PRIMITIVES_DIR" ]; then
     local PRIM_COUNT
-    PRIM_COUNT=$(find "$PRIMITIVES_DIR" -maxdepth 1 -name "*.md" | wc -l)
-    echo "Primitives: $PRIM_COUNT installed at $PRIMITIVES_DIR"
+    PRIM_COUNT=$(find -L "$PRIMITIVES_DIR" -maxdepth 1 -name "*.md" | wc -l)
+    local loc="$PRIMITIVES_DIR"
+    [ -L "$PRIMITIVES_DIR" ] && loc="$PRIMITIVES_DIR → $(readlink "$PRIMITIVES_DIR")"
+    echo "Primitives: $PRIM_COUNT installed at $loc"
   else
     echo "Primitives: not installed (run 'bocek update' or reinstall)"
   fi
 }
 
 cmd_update() {
-  local PRIMITIVES_DIR="$HOME/.bocek/primitives"
+  local REPO_DIR="$HOME/.bocek/.repo"
+  local LEGACY_DIR="$HOME/.bocek/primitives"
 
-  if [ ! -d "$PRIMITIVES_DIR/.git" ]; then
-    echo "bocek: primitives directory is not a git repo. Reinstall bocek." >&2
+  # Legacy install (repo cloned into ~/.bocek/primitives) — tell user to reinstall.
+  if [ ! -d "$REPO_DIR/.git" ] && [ -d "$LEGACY_DIR/.git" ] && [ ! -L "$LEGACY_DIR" ]; then
+    echo "bocek: detected legacy install layout. Re-run the installer to migrate:" >&2
+    echo "  curl -fsSL https://raw.githubusercontent.com/patrickmvla/bocek/main/install.sh | bash" >&2
     exit 1
   fi
 
-  cd "$PRIMITIVES_DIR"
+  if [ ! -d "$REPO_DIR/.git" ]; then
+    echo "bocek: repo not found at $REPO_DIR. Reinstall bocek." >&2
+    exit 1
+  fi
+
+  cd "$REPO_DIR"
   if git pull --ff-only 2>&1; then
     # Re-copy scripts after update
     cp scripts/bocek "$HOME/.bocek/bin/bocek"
     cp scripts/enforce-mode.sh "$HOME/.bocek/scripts/enforce-mode.sh"
+    cp scripts/session-banner.sh "$HOME/.bocek/scripts/session-banner.sh"
     chmod +x "$HOME/.bocek/bin/bocek"
     chmod +x "$HOME/.bocek/scripts/enforce-mode.sh"
+    chmod +x "$HOME/.bocek/scripts/session-banner.sh"
     echo "bocek: primitives and scripts updated."
   else
     echo "bocek: update failed. Check network and try again." >&2

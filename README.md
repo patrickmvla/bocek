@@ -22,18 +22,26 @@ curl -fsSL https://raw.githubusercontent.com/patrickmvla/bocek/main/install.sh |
 
 Requires: git, curl, jq.
 
+### Upgrading from an earlier install
+
+If you installed Bocek before slash commands landed, your `~/.bocek/` will have primitive files nested at `~/.bocek/primitives/primitives/` — the paths primitives reference are broken.
+
+Re-run the install command above. The installer detects the old layout, relocates the checkout to `~/.bocek/.repo`, and symlinks `primitives/`, `references/`, and `mental-models/` into place. `bocek update` does **not** perform this migration — you must re-run the `curl` command once.
+
 ## Usage
 
 ```bash
 # Navigate to your project
 cd your-project
 
-# Activate Bocek hooks
+# Activate Bocek hooks + install slash commands
 bocek on
 
-# Start Claude Code and load a primitive
-# "Read ~/.bocek/primitives/design.md and follow it"
+# Start Claude Code, then switch modes with a slash command:
+#   /design  /research  /implementation  /debugging  /refactoring  /review
 ```
+
+`bocek on` installs six project-scoped slash commands at `.claude/commands/` and registers a `SessionStart` hook that tells Claude the current mode and available commands. The previous workflow — pasting `Read ~/.bocek/primitives/design.md and follow it` — still works as a fallback.
 
 ### Commands
 
@@ -57,7 +65,7 @@ bocek on
 
 ## How it works
 
-1. **Load a primitive** — tell Claude to read `~/.bocek/primitives/design.md` (or any mode)
+1. **Run a slash command** — e.g. `/design` in Claude Code. The command body reads the matching primitive from `~/.bocek/primitives/`.
 2. **The primitive sets the mode** — writes `design` to `.bocek/mode`
 3. **The hook enforces constraints** — blocks source file writes in reasoning modes, allows vault writes
 4. **Work produces vault entries** — decisions, research, contracts saved to `.bocek/vault/`
