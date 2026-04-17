@@ -47,8 +47,14 @@ fi
 REPO_URL="https://github.com/patrickmvla/bocek.git"
 
 if [ -d "$REPO_DIR/.git" ]; then
-  info "Repo already cloned, updating..."
-  cd "$REPO_DIR" && git pull --ff-only 2>/dev/null || info "Update failed, using existing checkout"
+  info "Updating bocek..."
+  cd "$REPO_DIR"
+  git fetch origin main || error "Failed to fetch from origin. Check network and try again."
+  # Reset to origin/main, discarding any local modifications. The repo at
+  # $REPO_DIR is installer-owned — local edits are stale install artifacts
+  # from prior runs, not user work. A plain pull --ff-only fails when these
+  # exist, then later cp commands die on missing files. Reset is the fix.
+  git reset --hard origin/main >/dev/null || error "Failed to sync $REPO_DIR to origin/main. Manual fix: rm -rf $REPO_DIR and re-run."
 else
   info "Cloning bocek..."
   git clone --depth 1 "$REPO_URL" "$REPO_DIR" || error "Failed to clone repo"
