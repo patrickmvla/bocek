@@ -9,7 +9,7 @@ const installCmd =
   "curl -fsSL https://raw.githubusercontent.com/patrickmvla/bocek/main/install.sh | bash";
 ---
 
-<Base title="bocek — engineering with evidence, not vibes">
+<Base title="bocek — Claude Code modes with a vault">
   <!-- Hero -->
   <section class="relative overflow-hidden">
     <div class="hero-wash pointer-events-none absolute inset-0"></div>
@@ -29,17 +29,23 @@ const installCmd =
       <h1
         class="font-heading text-4xl font-semibold tracking-tight text-foreground sm:text-6xl sm:leading-[1.05]"
       >
-        The model is a dataset.
+        Claude Code with modes,
         <br />
-        <span class="text-muted-foreground">Treat it like one.</span>
+        <span class="text-muted-foreground"
+          >and a vault that remembers why.</span
+        >
       </h1>
 
       <p
         class="mt-8 max-w-2xl font-sans text-lg leading-relaxed text-muted-foreground"
       >
-        Ask for output, you get the median of everything ever written. Ask for
-        evidence — then challenge it — and you get the best of a thousand
-        senior engineers, filtered through your judgment.
+        Six slash commands flip Claude between reasoning and coding. A hook
+        blocks source-file writes while you're still deciding. Every resolved
+        decision — with its evidence and its rejected alternatives — lands in
+        <code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.9em] text-foreground"
+          >.bocek/vault/</code
+        > and ships with your repo.
       </p>
 
       <div class="mt-10">
@@ -49,13 +55,28 @@ const installCmd =
       <p
         class="mt-4 font-mono text-[11px] tracking-tight text-muted-foreground"
       >
-        requires <span class="text-foreground">git</span> ·
-        <span class="text-foreground">curl</span> ·
-        <span class="text-foreground">jq</span> — then
-        <code
+        then <code
           class="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground"
           >bocek on</code
-        > in any project
+        > in your project — adds <code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground"
+          >/design</code
+        >, <code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground"
+          >/research</code
+        >, <code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground"
+          >/implementation</code
+        >, <code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground"
+          >/debugging</code
+        >, <code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground"
+          >/refactoring</code
+        >, <code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground"
+          >/review</code
+        >
       </p>
     </div>
   </section>
@@ -64,39 +85,37 @@ const installCmd =
   <ChapterHeading
     id="problem"
     number="01"
-    title="The default output is mediocre by definition."
+    title="How mediocre software gets written with an AI assistant."
     kicker="the problem"
   >
     <div class="space-y-6 text-base leading-relaxed text-muted-foreground">
       <p>
-        An LLM is a prediction engine. It produces the most statistically likely
-        output given its training data. The majority of that training data is
-        mediocre code — Stack Overflow answers, tutorial projects, boilerplate
-        repos, average production codebases.
+        Day one. You type
+        <span class="text-foreground">"build me a checkout API."</span> The model
+        generates route handlers from its training-data defaults. Nobody asked
+        which inventory locking strategy applied under your write volume.
+        Nobody checked how Stripe actually handles idempotency. Nobody wrote
+        down why REST instead of GraphQL. It compiled, the happy path works,
+        you move on.
       </p>
       <p>
-        When you say <span class="text-foreground">"build me a checkout API,"</span>
-        the model doesn't think about your specific constraints. It produces the
-        average checkout API from its training data. That average includes every
-        shortcut, every missing edge case, every <span class="text-foreground"
-          >"good enough"</span
-        > decision from every codebase it's seen.
+        Month three. You ask the model to add a feature. It doesn't know auth
+        was supposed to be JWT with a 15-minute expiry — that decision was
+        never made, only assumed. It generates session-based auth. The project
+        now has two auth systems. Nobody can tell you why.
+      </p>
+      <p>
+        Month six. Inventory deadlocks under load. You ask the model to fix
+        it. It doesn't know the locking strategy was supposed to be deliberate
+        — because it wasn't. It "fixes" the deadlock by removing the lock.
+        Inventory goes negative in production.
       </p>
 
-      <blockquote
-        class="my-8 border-l-2 pl-6 font-heading text-lg leading-snug text-foreground"
-        style="border-left-color: var(--accent-amber);"
-      >
-        Every ungrounded decision makes the next decision worse — because the
-        model has less ground truth to reason from.
-      </blockquote>
-
-      <p>
-        By decision twenty, the inventory locking strategy was never chosen (it
-        defaulted to none), the error contract was never specified, the auth
-        token lifecycle was never designed. Every new feature interacts with
-        twenty unexamined assumptions. The model can't help, because the model
-        doesn't know which behaviors are intentional and which are accidents.
+      <p class="text-foreground">
+        This is compounding. Every ungrounded decision makes the next decision
+        worse, because the model has less ground truth to reason from. By
+        decision twenty, the model can't help — it doesn't know which
+        behaviors are intentional and which are accidents. Neither do you.
       </p>
     </div>
   </ChapterHeading>
@@ -105,41 +124,44 @@ const installCmd =
   <ChapterHeading
     id="shift"
     number="02"
-    title="Ask for evidence, not output."
+    title="The model knows more than it gives you."
     kicker="the shift"
     variant="alt"
   >
-    <div class="space-y-8 text-base leading-relaxed text-muted-foreground">
+    <div class="space-y-6 text-base leading-relaxed text-muted-foreground">
       <p>
-        The model has read every architecture post-mortem, every scaling
-        failure, every production incident write-up. It knows how Stripe handles
-        idempotency. It knows why optimistic locking fails under flash-sale
-        conditions. But when you ask for output, it gives you the average — not
-        because it doesn't know better, but because you didn't ask for better.
+        An LLM is a prediction engine. It produces the most statistically
+        likely output given its training data, which is mostly average code —
+        Stack Overflow, tutorials, boilerplate, unremarkable production repos.
+        Ask for output and you get the median of all that.
+      </p>
+      <p>
+        But the same model has read every architectural post-mortem, every
+        scaling failure, every production incident write-up that was
+        published. It knows how Stripe handles idempotency. It knows why
+        optimistic locking fails under flash sales. That knowledge sits below
+        the surface — a strong default pulls it toward the average.
       </p>
 
-      <blockquote
-        class="my-8 border-l-2 pl-6 font-heading text-lg leading-snug text-foreground"
-        style="border-left-color: var(--accent-amber);"
+      <div
+        class="my-4 grid gap-px overflow-hidden rounded-lg border border-border/60 sm:grid-cols-2"
       >
-        Design tokens are investment tokens. Implementation tokens without
-        design are waste tokens.
-      </blockquote>
-
-      <div class="my-4 grid gap-px overflow-hidden rounded-lg border border-border/60 sm:grid-cols-2">
         <div class="bg-background p-6">
           <div class="mb-3 flex items-center gap-2">
-            <span class="h-1.5 w-1.5 rounded-full bg-muted-foreground/60"></span>
+            <span class="h-1.5 w-1.5 rounded-full bg-muted-foreground/60"
+            ></span>
             <span
               class="font-heading text-[10px] uppercase tracking-[0.22em] text-muted-foreground"
-              >ungrounded ask</span
+              >executor</span
             >
           </div>
-          <p class="font-mono text-[13px] leading-relaxed text-muted-foreground">
+          <p
+            class="font-mono text-[13px] leading-relaxed text-muted-foreground"
+          >
             "Build me a checkout API."
           </p>
           <p class="mt-3 text-xs leading-relaxed text-muted-foreground">
-            → median code from the training data
+            → the median of every checkout API in the training data
           </p>
         </div>
         <div class="bg-background p-6">
@@ -149,56 +171,179 @@ const installCmd =
             ></span>
             <span
               class="font-heading text-[10px] uppercase tracking-[0.22em] text-[color:var(--accent-amber)]"
-              >grounded ask</span
+              >evidence source + adversarial reviewer</span
             >
           </div>
           <p class="font-mono text-[13px] leading-relaxed text-foreground">
-            "Show me how Stripe handles idempotency in their node SDK, then
-            challenge my approach to inventory locking."
+            "Show me how Stripe handles idempotency in their node SDK. Then
+            attack my approach to inventory locking."
           </p>
           <p class="mt-3 text-xs leading-relaxed text-muted-foreground">
-            → the best of the training data, filtered through your judgment
+            → the knowledge below the surface, filtered through your judgment
           </p>
         </div>
       </div>
 
       <p>
-        Stop treating the model as an executor. Start treating it as an evidence
-        source and an adversarial reviewer. You are the judge — you provide
-        taste, context, and the final call. The model presents evidence and
-        challenges it. When you override it, the vault records your reason.
+        Bocek's primitives encode this shift as an operational contract. In
+        <code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+          >design</code
+        > mode the model doesn't accept your plan — it takes a position,
+        attacks its own recommendation harder than yours, and calibrates
+        pushback to the quality of your reasoning. Sound reasoning gets
+        accepted. Confident-but-wrong gets torn apart. Honest uncertainty gets
+        helped. Impatience gets met with more pushback, because skipping
+        reasoning is the signal that reasoning is needed.
+      </p>
+      <p class="text-foreground">
+        This is code review, not conversation. You provide taste, context, and
+        the final call. The model provides evidence, challenges, and
+        execution. When it pushes back, that's the system working.
       </p>
     </div>
   </ChapterHeading>
 
-  <!-- 03 — the modes -->
+  <!-- 03 — the loop -->
+  <ChapterHeading
+    id="loop"
+    number="03"
+    title="A session, start to finish."
+    kicker="the loop"
+  >
+    <div class="space-y-6 text-base leading-relaxed text-muted-foreground">
+      <p>
+        You open Claude Code in the project and type <code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.9em] text-foreground"
+          >/design</code
+        >.
+      </p>
+
+      <pre
+        class="overflow-x-auto rounded-lg border border-border/60 bg-card px-5 py-4 font-mono text-[13px] leading-relaxed text-foreground"><code>/design
+Checkout flow. Start with the decisions I haven't made.</code></pre>
+
+      <p>
+        Design is a reasoning mode. The hook blocks source-file writes until
+        you switch to a coding mode — Claude can only ask, argue, and write to
+        the vault.
+      </p>
+
+      <div
+        class="rounded-lg border border-border/60 bg-background-alt/40 px-5 py-4 text-[15px] leading-relaxed text-foreground"
+      >
+        <div
+          class="mb-2 font-heading text-[10px] uppercase tracking-[0.22em] text-muted-foreground"
+        >
+          claude, in design mode
+        </div>
+        <p class="mb-2">
+          You didn't say when inventory gets reserved. Three options —
+        </p>
+        <ul class="mb-2 space-y-0.5 pl-4 text-[14px]">
+          <li>(a) at add-to-cart, 15-min expiry — Shopify's pattern.</li>
+          <li>(b) at payment-start, 2-min expiry — Amazon's.</li>
+          <li>(c) no lock, reconcile on conflict — low volume only.</li>
+        </ul>
+        <p>
+          I'd argue for (a) at under 50 writes/sec. Under flash sales it
+          starves legitimate buyers. So: what's your peak write volume, and do
+          you run flash sales?
+        </p>
+      </div>
+
+      <p>
+        You answer. The model either records the decision or escalates and
+        demands more defense. When a question resolves, it writes the
+        reasoning trail to the vault:
+      </p>
+
+      <pre
+        class="overflow-x-auto rounded-lg border border-border/60 bg-card px-5 py-4 font-mono text-[12px] leading-relaxed text-foreground"><code>.bocek/vault/checkout/optimistic-locking.md
+
+# Optimistic locking for inventory decrement
+
+## Chosen
+Optimistic locking with retry. Reservation: 15 min from add-to-cart.
+
+## Rejected
+- Pessimistic row-level lock — blocks during the Stripe call.
+- No lock + reconcile — breaks above write throughput.
+
+## Rationale
+Steady-state writes under 50/sec. Flash sales not on roadmap.
+Conflict rate projected &lt;2%, retry cost is cheap.
+
+## Revisit when
+- Flash-sale feature gets scoped.
+- Sustained write volume exceeds 200/sec.</code></pre>
+
+      <p>
+        When the vault holds enough decisions to ship, you type <code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.9em] text-foreground"
+          >/implementation</code
+        >. The hook unlocks source-file writes. Implementation mode requires
+        every function to open with a quote from the vault contract it
+        satisfies — if a decision is missing, Claude stops and flags the gap
+        instead of guessing.
+      </p>
+
+      <p class="text-foreground">
+        The vault commits with your code. The next session reads it before
+        writing a line.
+      </p>
+    </div>
+  </ChapterHeading>
+
+  <!-- 04 — the modes -->
   <ChapterHeading
     id="modes"
-    number="03"
+    number="04"
     title="Six modes. Each demands something from you."
     kicker="the modes"
+    variant="alt"
   >
     <p
       class="mb-10 max-w-2xl text-base leading-relaxed text-muted-foreground"
     >
-      Modes aren't features — they're contracts. The model doesn't accommodate
-      weak reasoning. It escalates.
+      Modes aren't features. They're contracts. The model doesn't accommodate
+      weak reasoning — it escalates. You switch with a slash command; the
+      contract for that mode loads, and the hook enforces what that mode can
+      touch.
     </p>
     <ModesTable />
+    <p
+      class="mt-8 max-w-2xl text-sm leading-relaxed text-muted-foreground"
+    >
+      Modes are independent, not a pipeline. You switch whenever you need to
+      — <code
+        class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+        >/research</code
+      > mid-design, <code
+        class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+        >/debugging</code
+      > mid-implementation, back to <code
+        class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+        >/design</code
+      > when a gap surfaces. The vault is how you carry work across the
+      switches.
+    </p>
   </ChapterHeading>
 
-  <!-- 04 — enforcement -->
+  <!-- 05 — enforcement -->
   <ChapterHeading
     id="enforcement"
-    number="04"
-    title="Three layers of defense. The first one costs zero tokens."
+    number="05"
+    title="Context rot is structural. Three layers of defense cover the gap."
     kicker="enforcement"
-    variant="alt"
   >
     <p class="mb-10 max-w-2xl text-base leading-relaxed text-muted-foreground">
-      Instructions degrade as context grows — context rot is structural, not a
-      bug. So Bocek doesn't trust the model's memory to enforce its own
-      contracts. Each layer catches what the previous misses.
+      Every model degrades as context grows — 95% accuracy nosediving to 60%
+      past a threshold (Chroma, 18 frontier models). Position bias is baked
+      into the architecture — information in the middle of context loses
+      roughly 30% attention. An instruction that says "don't write code in
+      design mode" does not survive a long session. So Bocek doesn't rely on
+      the model remembering its own contract.
     </p>
 
     <div class="divide-y divide-border/60 border-y border-border/60">
@@ -209,17 +354,24 @@ const installCmd =
           >
             layer 01
           </div>
-          <div class="mt-1 font-heading text-base font-semibold text-foreground">
+          <div
+            class="mt-1 font-heading text-base font-semibold text-foreground"
+          >
             the hook
           </div>
         </div>
-        <div class="space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <div
+          class="space-y-3 text-sm leading-relaxed text-muted-foreground"
+        >
           <p>
-            A bash script that runs outside the context window. It reads
-            <code
+            A bash script registered as a <code
+              class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+              >PreToolUse</code
+            > hook. It runs outside the context window, reads <code
               class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
               >.bocek/mode</code
-            > and blocks <code
+            >, and either allows or denies the tool call before it reaches
+            Claude. In reasoning modes it blocks <code
               class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
               >Edit</code
             >, <code
@@ -232,7 +384,13 @@ const installCmd =
             >, <code
               class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
               >python&nbsp;-c</code
-            >, shell redirects.
+            >, shell redirects, <code
+              class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+              >tee</code
+            >. The Bash bypass is a filed issue (<code
+              class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+              >claude-code#29709</code
+            >) — matching Edit/Write only would be trivially defeated.
           </p>
           <p class="font-heading text-[11px] tracking-tight text-foreground">
             zero tokens · non-bypassable · can't degrade
@@ -247,16 +405,23 @@ const installCmd =
           >
             layer 02
           </div>
-          <div class="mt-1 font-heading text-base font-semibold text-foreground">
+          <div
+            class="mt-1 font-heading text-base font-semibold text-foreground"
+          >
             the primitive
           </div>
         </div>
-        <div class="space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <div
+          class="space-y-3 text-sm leading-relaxed text-muted-foreground"
+        >
           <p>
-            An 800–2,000 token contract the model loads into context. It
-            specifies what the mode demands, how to calibrate response to the
-            human's reasoning, and when to stop and flag. Works while attention
-            holds — which is most of the time.
+            Each mode's behavioral contract is split into a small core
+            (roughly 800–2,000 tokens — Anthropic's persistence sweet spot)
+            and a set of reference files loaded on demand via tool calls. The
+            core lives in the highest-attention zone at the start of context.
+            References arrive fresh at the end, where attention is strongest.
+            The middle — where context rot bites — holds accumulated tool
+            results and resolved conversation, where decay is correct.
           </p>
           <p class="font-heading text-[11px] tracking-tight text-foreground">
             in-context · degrades with length · catches what the hook can't
@@ -271,18 +436,23 @@ const installCmd =
           >
             layer 03
           </div>
-          <div class="mt-1 font-heading text-base font-semibold text-foreground">
+          <div
+            class="mt-1 font-heading text-base font-semibold text-foreground"
+          >
             session restart
           </div>
         </div>
-        <div class="space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <div
+          class="space-y-3 text-sm leading-relaxed text-muted-foreground"
+        >
           <p>
-            Your reset button. When context rots, start a fresh session.
-            <code
+            When the session has drifted far enough that you notice, you
+            restart. A fresh Claude Code window reads <code
               class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
-              >state.md</code
-            > and the compiled vault mean the new session inherits every resolved
-            decision. Not a blank slate — a continuation.
+              >.bocek/state.md</code
+            > and the compiled vault and picks up at the last resolved
+            decision. Not a blank slate — a continuation. Sessions are
+            disposable, knowledge is permanent.
           </p>
           <p class="font-heading text-[11px] tracking-tight text-foreground">
             manual · full recovery · the vault is the memory
@@ -291,33 +461,96 @@ const installCmd =
       </div>
     </div>
 
-    <p class="mt-10 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-      Nothing registers at startup. No persona, no skills loaded, no always-on
-      instructions — every token in context is a token you chose to load.
+    <p
+      class="mt-10 max-w-2xl text-sm leading-relaxed text-muted-foreground"
+    >
+      Nothing registers until <code
+        class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+        >bocek on</code
+      >. No persona loaded, no skills attached, no always-on system prompt.
+      Every token in context is a token you chose to load.
     </p>
   </ChapterHeading>
 
-  <!-- 05 — the vault -->
+  <!-- 06 — the vault -->
   <ChapterHeading
     id="vault"
-    number="05"
-    title="The vault is the product. The code is downstream."
+    number="06"
+    title="The code is downstream. The vault is the product."
     kicker="the vault"
+    variant="alt"
   >
-    <p class="mb-10 max-w-2xl text-base leading-relaxed text-muted-foreground">
-      Decisions, rejected alternatives, contracts, research — captured in
-      markdown, compiled for the model on demand. New sessions aren't blank
-      slates. They continue.
+    <p
+      class="mb-10 max-w-2xl text-base leading-relaxed text-muted-foreground"
+    >
+      The vault is two representations of the same knowledge. The source of
+      truth is Obsidian-style markdown — YAML frontmatter, wikilinks, optional
+      feature folders — so humans can read and cross-reference it. A compiled
+      per-feature layer is generated on demand by implementation mode when
+      source files change. You never hand-edit the compiled layer. You commit
+      the source.
     </p>
 
     <VaultCompare />
 
-    <p class="mt-10 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-      Two formats, one direction. Obsidian-style markdown is the source of
-      truth; per-feature files are compiled lazily — only when implementation
-      mode needs them, only if the source has changed. No sync step. No stale
-      artifacts. The vault travels with the code.
+    <p
+      class="mt-10 max-w-2xl text-sm leading-relaxed text-muted-foreground"
+    >
+      Two formats, one direction. Compilation is lazy — only when
+      implementation mode needs the feature's compiled file, only if the
+      source has changed. No sync step. No stale artifacts. The vault travels
+      with the code; the compiled layer is gitignored because it's a build
+      artifact, regenerable from the source.
     </p>
   </ChapterHeading>
 
+  <!-- Getting started -->
+  <section class="relative">
+    <div class="mx-auto max-w-3xl px-6 py-20">
+      <div class="mb-10 flex items-baseline gap-5">
+        <span
+          aria-hidden="true"
+          class="font-heading text-sm font-semibold tracking-[0.2em] text-[color:var(--accent-amber)]"
+          >07</span
+        >
+        <span class="h-px flex-1 bg-border/60"></span>
+        <span
+          class="font-heading text-[10px] uppercase tracking-[0.25em] text-muted-foreground"
+          >getting started</span
+        >
+      </div>
+      <h2
+        class="mb-8 font-heading text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
+      >
+        Install. Activate. Design something you can defend.
+      </h2>
+      <div class="space-y-4">
+        <TerminalBlock command={installCmd} title="~ — install bocek" />
+        <TerminalBlock
+          command="cd your-project && bocek on"
+          title="~/your-project"
+        />
+      </div>
+      <p
+        class="mt-6 max-w-2xl text-sm leading-relaxed text-muted-foreground"
+      >
+        Open Claude Code in the same directory. Run <code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+          >/design</code
+        > and start with a real decision — the one you've been avoiding.
+        Requires git, curl, and jq. Nothing else gets touched until you
+        activate a project.
+      </p>
+      <p
+        class="mt-6 text-sm leading-relaxed text-muted-foreground"
+      >
+        The <a
+          href="/guide"
+          class="text-foreground underline decoration-border/60 underline-offset-4 transition-colors hover:decoration-[color:var(--accent-amber)]"
+          >guide</a
+        > walks a full checkout session end-to-end: design → research →
+        implementation → review, with the vault files each mode produces.
+      </p>
+    </div>
+  </section>
 </Base>

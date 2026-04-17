@@ -1,222 +1,344 @@
 ---
 title: Guide
-subtitle: How a Bocek session actually works, with a worked example.
-description: A walkthrough of a real Bocek session — design, vault, implementation — using the checkout example.
+subtitle: A full checkout session — design, research, implementation, debugging, refactoring, review.
+description: Walk through a real Bocek session end-to-end, with the vault artifacts each mode produces.
 order: 1
 ---
 
 import TerminalBlock from "../../components/TerminalBlock.astro";
 
-## Before you read this
-
-This guide is not "how to install Bocek." That's two commands and it's at the end. This is what a session *feels* like — what you type, what the model does back, what ends up in the vault, and how the next session picks up where this one stopped.
-
-The worked example below adds a **checkout feature** to an imaginary e-commerce project. It's the same example the repo ships in `examples/vault/checkout/`, so you can compare the artifacts we describe here to the real files.
-
----
-
-## The shape of a session
-
-Every session has three moving parts:
-
-1. **A primitive** loaded in Claude Code — the behavior contract (`design`, `research`, `implementation`, `debugging`, `refactoring`, `review`).
-2. **A mode file** on disk at `.bocek/mode` — which the enforcement hook reads on every tool call.
-3. **The vault** at `.bocek/vault/` — the accumulating record of decisions, research, and contracts.
-
-When you load a primitive, the mode file updates. When the model tries to write code in a reasoning mode, the hook blocks it — before the tool call reaches the model's context. Zero tokens spent on enforcement, zero chance of the model talking itself out of the rule.
-
----
-
-## 1. Starting a design session
-
-You've just cloned an empty project. You want to design a checkout flow before writing a line of code.
+You've cloned an empty project. You want a checkout feature. The rest of this page is what that session looks like — every slash command, what Claude does, what lands in the vault.
 
 <TerminalBlock command="cd your-project && bocek on" title="~/your-project" />
 
-Open Claude Code in the same directory, then load the design primitive:
-
-```
-Read ~/.bocek/primitives/design.md and follow it.
-I'm designing a checkout flow. Start by forcing the hidden decisions.
-```
-
-The design primitive makes the model do something specific: it surfaces decisions you haven't made yet, takes a position with evidence, and attacks its own recommendation harder than yours. You don't drive — it drives.
-
-A real response from the design mode looks like this:
-
-> You said "checkout flow." That phrase carries at least six unmade decisions.
-> The first one that will hurt you is **inventory reservation timing**.
->
-> You have three options. I'll take a position, then attack it:
->
-> **Position:** reserve on add-to-cart, expire after 15 minutes.
->
-> **Evidence:** Shopify's abandoned-cart data shows 68% of carts finish or abandon inside 12 minutes. Amazon does this too, with a shorter window.
->
-> **Attack on my own position:** under flash-sale conditions, 15-minute holds on popular SKUs starve legitimate buyers. You'll see "out of stock" on items that nobody's actually buying — they're in dead carts.
->
-> Before I record anything: what's your write volume under peak load, and do you have flash-sale traffic? If you don't know, we need to decide on a reservation strategy that degrades gracefully across both regimes.
-
-You answer honestly. The model either accepts and writes the decision to the vault, or it escalates and demands more defense. Confident-but-wrong gets attacked. Honestly-uncertain gets helped.
+`bocek on` writes six slash commands into `.claude/commands/`, registers two hooks (enforcement + session banner), and creates `.bocek/mode` containing `idle`. Nothing else changes. Open Claude Code in the same directory.
 
 ---
 
-## 2. What ends up in the vault
+## 1. `/design` — force the decisions you haven't made
 
-When a decision survives scrutiny, the model writes a file like `.bocek/vault/checkout/optimistic-locking.md`:
+```
+/design
+Checkout flow. Start with the decisions I haven't made.
+```
+
+Design is a reasoning mode. The enforcement hook blocks `Edit`, `Write`, and file-modifying `Bash` patterns outside `.bocek/` — Claude can only ask, argue, and write to the vault. The primitive loads a ~1,500-token core that names the interaction loop: identify a hidden decision, take a position with evidence, attack its own position harder than yours, refuse to resolve until you've defended with reasoning or changed your mind.
+
+What that looks like in practice:
+
+> You said "checkout flow." That phrase carries at least six unmade decisions. The first that will hurt you is **inventory reservation timing**.
+>
+> Three options:
+> (a) reserve on add-to-cart, 15-min expiry — Shopify's pattern
+> (b) reserve at payment-start, 2-min expiry — Amazon's
+> (c) no lock, reconcile after the fact — low-volume only
+>
+> I'll argue for (a) at steady-state writes under 50/sec. But under flash sales, 15-minute holds on hot SKUs starve real buyers. What's your peak write volume, and do you run flash sales?
+
+You answer honestly. Sound reasoning gets accepted. Confident-but-wrong gets attacked with counter-evidence. No reasoning at all (`just use X`) gets refused. Impatience gets met with more pushback. Honest uncertainty gets helped — the model switches to surfacing options with evidence.
+
+When a question resolves, the decision lands in the vault:
 
 ```markdown
 ---
 type: decision
-feature: checkout
-status: resolved
-date: 2026-04-16
-tags: [inventory, concurrency]
+features: [checkout]
+related: ["[[cart-expiry]]", "[[stripe-idempotency-research]]"]
+created: 2026-04-17
+confidence: high
 ---
 
 # Optimistic locking for inventory decrement
 
 ## Chosen
-Optimistic locking with retry on conflict. Reservation window: 15 min.
+Optimistic locking with retry. Reservation: 15 min from add-to-cart.
 
 ## Rejected
-- Pessimistic row-level lock — blocks during external Stripe call,
-  degrades under flash sales.
-- No lock + reconcile — acceptable for low-volume, breaks the moment
+- Pessimistic row-level lock — blocks during the Stripe call, degrades
+  under flash sales.
+- No lock + reconcile — acceptable at low volume, breaks the moment
   concurrent checkouts exceed write throughput.
 
 ## Rationale
-Write volume is <50 writes/sec steady-state, no flash-sale roadmap
-in the next two quarters. Conflict rate projected <2%, retry cost
-is cheap.
+Steady-state writes under 50/sec. Flash sales not on roadmap. Conflict
+rate projected <2%, retry cost is cheap.
+
+## Failure mode
+Under sustained writes above ~200/sec, retry storms. Revisit when we
+get close.
 
 ## Revisit when
-- Flash-sale feature gets scoped
-- Sustained write volume exceeds 200/sec
-- Conflict rate observed above 5%
+- Flash-sale feature gets scoped.
+- Sustained write volume exceeds 200/sec.
+- Conflict rate observed above 5%.
 ```
 
-The human layer is Obsidian-style markdown. You read it in a PR. You link decisions with wikilinks. You don't hand-write any of this — the model writes it under your direction and you review it before the session ends.
+You'll notice what's not there: no "this is a good approach because," no hedging, no summary paragraph. The vault captures the chosen path, the strongest rejected alternative with why it lost, the conditions under which the decision breaks, and what should trigger reopening it.
 
-### What the vault looks like on disk
+---
 
-After a few sessions on a feature, `.bocek/` in your project root looks like this:
+## 2. `/research` — gather evidence when you hit a gap
+
+Mid-design you realize you don't actually know how Stripe handles idempotency. Switch primitives without ending the session:
+
+```
+/research
+Cite how Stripe handles idempotency in their node SDK.
+Find conflicts between their docs and their actual code.
+```
+
+Research is also a reasoning mode — same write restrictions. The primitive has three evidence channels: production code (GitHub API for targeted reads, shallow clone to `/tmp/bocek-ref-*` for exploration), current documentation, and academic sources when formal properties matter. The core mandate is source skepticism: every finding gets challenged before it gets vaulted. How old is this? What's the author's scale? Does the actual code match what the blog post claims? Who disagrees?
+
+The output isn't a summary — it's an evidence package with conflicts built in:
+
+```markdown
+---
+type: research
+features: [checkout, payments]
+related: ["[[optimistic-locking]]"]
+created: 2026-04-17
+confidence: high
+---
+
+# How Stripe handles idempotency in the node SDK
+
+## Question
+Does Stripe's node SDK enforce idempotency keys client-side, server-side,
+or both — and how does it handle retries under network failure?
+
+## Sources Examined
+- stripe/stripe-node (GH API, src/StripeResource.js)
+- stripe.com/docs/api/idempotent_requests (fetched 2026-04-17)
+- "Idempotency Keys in Production" — Stripe engineering blog, 2021
+
+## Findings
+### Server-side storage, client-side generation
+Keys are client-generated (UUIDv4 in the SDK). Stripe stores the full
+response for 24 hours keyed on (account_id, idempotency_key).
+Subsequent requests with the same key return the cached response
+byte-for-byte — including the original status code.
+
+### Retry behavior on network failure
+The SDK auto-retries up to 2 times on connection errors with the
+same idempotency key, exponential backoff. 5xx errors are retried,
+4xx are not.
+
+## Conflicts
+The 2021 blog post says keys expire after 24 hours; the current API
+docs say "at least 24 hours." The code in StripeResource.js doesn't
+expire anything — it relies on server-side TTL.
+
+## Conditions
+- Holds for API version 2024-04-10 and later. Pre-2020 versions had
+  different retry semantics — check if you're pinning an older version.
+- Does NOT hold if you pass `idempotencyKey: null` explicitly, which
+  disables the feature.
+
+## Open threads
+- Behavior during a Stripe outage isn't documented. We should test
+  against their webhook simulator before production.
+```
+
+The `Conflicts`, `Conditions`, and `Open Threads` sections are load-bearing. They're what prevents the vault from becoming a collection of uncritical summaries.
+
+---
+
+## 3. Back to `/design` — resume with the evidence
+
+Research produced the evidence. Now you resume design with it in hand:
+
+```
+/design
+Resume from the last state. Use the Stripe research
+[[stripe-idempotency-research]] to check whether my
+payment-success-but-order-creation-failure plan holds.
+```
+
+The session banner at the top of every Claude Code session tells the model which mode is active — it doesn't have to guess. The model reads the referenced vault entry, compares it against your plan, and surfaces the gap it finds. Another decision resolves. Another vault file lands.
+
+---
+
+## 4. `/implementation` — write code constrained by the vault
+
+When the vault holds enough decisions to ship:
+
+```
+/implementation
+Read the compiled vault for checkout. Implement the reserve-inventory
+endpoint.
+```
+
+Implementation is a code mode — the hook allows `Edit`, `Write`, and `Bash` writes. The primitive does two things the moment it loads: checks whether `.bocek/vault/.compiled/checkout.md` is stale (regenerating it from the source files if so), then loads the compiled context. The compiled layer is optimized for clarity — constraints with rationale, contracts with type signatures, cross-feature dependencies — not token density.
+
+Then the behavioral contract kicks in. Every function opens with a citation:
+
+```ts
+// Contract: "optimistic locking with retry, 15-min reservation window"
+// — .bocek/vault/checkout/optimistic-locking.md
+export async function reserveInventory(
+  sku: string,
+  quantity: number,
+  cartId: string,
+): Promise<Reservation> {
+  // ...
+}
+```
+
+If implementation hits a decision the vault doesn't cover, it stops:
+
+> I need to know what happens when a reservation is held by a cart that abandoned after add-to-cart but before payment-start. The 15-min expiry covers this — but what surfaces to the user when they hit `/payment` on a cart with an expired reservation? Options I can see from training data: (a) silent re-reserve, (b) 409 with re-price, (c) redirect to cart. None of these are vaulted. Resolve in design mode, or give me a directive.
+
+Not a guess. Not a picked-the-expedient-option. A gap report with enough context that you can jump back to `/design` or answer in one line.
+
+---
+
+## 5. `/debugging` — fix failures without wrecking design
+
+Checkout ships. A week later, an alert fires: inventory counts are drifting negative. You switch to debugging:
+
+```
+/debugging
+Alert attached. Stack trace and logs below.
+[paste]
+```
+
+The primitive refuses to theorize without error messages, stack traces, logs, or reproduction steps. With evidence in hand, it reads the relevant vault entries *before* forming hypotheses — then classifies the root cause as one of three things:
+
+- **Implementation bug** — the code doesn't do what the vault says. Fix it.
+- **Design gap** — the vault doesn't cover the scenario. Stop, flag it.
+- **Incorrect assumption** — the vault decision assumed something that doesn't hold. Flag for design review.
+
+This is the difference between "the model fixed the bug" and "the model fixed the bug without destroying optimistic locking." When it applies the fix, it narrates which vault constraints it's preserving and why. If the fix would require violating a constraint, it stops instead. Discoveries — new things learned about the system's behavior under load — get written back to the vault as `context` entries, linked to the decisions they affect.
+
+---
+
+## 6. `/refactoring` — restructure what already works
+
+Months pass. The order-creation module has grown. You want to split it:
+
+```
+/refactoring
+Split src/orders/create.ts into request-handling and domain logic.
+Behavior must not change.
+```
+
+Refactoring is the most conservative mode. Before it touches anything, it reads every branch, every edge case, every error handler. It maps behavior — not structure — to what each block actually guarantees. It reads the vault contracts that the code must continue to satisfy. It reads the tests that verify current behavior.
+
+Then the **untouchable code rule**: any code the model cannot explain does not get touched. Not "looks weird," not "probably unnecessary" — if the model can't trace the reason the code exists, it asks you. If you don't know either, the code stays. The codebase's existence is its own documentation for cases your training data doesn't know about: production edge cases discovered under load, third-party workarounds, regulatory requirements no one wrote down.
+
+It proposes a plan. You approve. Only then does execution begin — small verified steps, tests run between each, rollback on the first failing test. No massive rewrites. No deletion sprees.
+
+---
+
+## 7. `/review` — check the code against the vault
+
+You're about to merge. One last pass:
+
+```
+/review
+Review the checkout feature against the vault.
+```
+
+Review is a reasoning mode — no code edits. Its job isn't to lint or opine on style. Its job is drift detection. For every relevant vault entry, it traces the decision or contract through the code and classifies each finding:
+
+- **DRIFT** — code deviates from the vault. Either the code is wrong, or the vault is stale.
+- **GAP** — the vault specifies something the code never implemented.
+- **ORPHAN** — the code does something no vault entry covers.
+
+```markdown
+### DRIFT — payment endpoint returns 400 instead of 409 on inventory conflict
+
+**Vault says:** "409 on inventory conflict" — [[payment-api-contract]]
+**Code does:** Returns 400 with body `{error: "conflict"}`
+— src/payments/checkout.ts:87
+**Discrepancy:** Status code mismatch. Clients branching on 409 will
+not fire.
+**Severity:** major
+**Recommendation:** Fix the code, re-run integration tests against the
+orders service.
+```
+
+Code quality issues — real ones, bugs and security holes and N+1 queries — get flagged only when they'd cause production problems. Style preferences, naming opinions, and pattern suggestions do not appear. Review's job is to find where you drifted, not to relitigate decisions the vault already resolved.
+
+---
+
+## The vault on disk
+
+After a few sessions, `.bocek/` in your project root looks like this:
 
 ```
 .bocek/
-├── mode                          ← current mode: idle|design|research|…
+├── mode                          ← current mode, gitignored
 ├── state.md                      ← active feature, last decision, next question
 └── vault/
-    ├── index.md                  ← LLM entry point, auto-maintained
+    ├── index.md                  ← LLM entry point, vault_version in frontmatter
     ├── .compiled/                ← gitignored, regenerated on demand
     │   ├── checkout.md
     │   └── auth.md
-    ├── checkout/                 ← optional feature grouping
+    ├── checkout/
     │   ├── cart-expiry.md                 (decision)
     │   ├── optimistic-locking.md          (decision)
     │   ├── stripe-idempotency-research.md (research)
-    │   └── checkout-api-contract.md       (contract)
+    │   ├── payment-api-contract.md        (contract)
+    │   └── inventory-drift-discovery.md   (context, from /debugging)
     ├── auth/
     │   └── session-format.md              (decision)
-    └── inventory-locking-patterns.md      ← cross-feature entry, vault root
+    └── inventory-locking-patterns.md      ← cross-feature, at vault root
 ```
 
-A few things worth knowing:
+Worth knowing:
 
-- **Feature folders are optional.** Files that span multiple features live at the vault root. The wikilink graph matters more than the folder tree.
-- **`.compiled/` is never hand-edited.** Implementation mode regenerates it from the human files when anything upstream has changed.
-- **`mode` and `state.md` sit one level up**, outside `vault/`. They're session state — not knowledge the vault is supposed to preserve.
+- **Feature folders are optional.** Files that span multiple features live at the vault root. Wikilinks matter more than folder layout.
+- **`.compiled/` is never hand-edited.** Implementation mode regenerates per-feature files when any source upstream has changed.
+- **`mode` and `state.md` sit above `vault/`.** They're session state, not preserved knowledge. `mode` is gitignored; `state.md` is committed for v1 solo use (the team-workflow version will likely flip this).
 - **Commit `vault/`. Ignore `.compiled/`.** The `.gitignore` entry is added automatically the first time the vault is created.
 
 ---
 
-## 3. Switching to research mid-flow
+## Switching modes
 
-Mid-session you realize you don't actually know how Stripe handles idempotency. Switch primitives without ending the session:
+| You want to…                              | Run               |
+| ----------------------------------------- | ----------------- |
+| Decide an approach                        | `/design`         |
+| Gather evidence from code or docs         | `/research`       |
+| Ship code against a complete vault        | `/implementation` |
+| Investigate a failure with a stack trace  | `/debugging`      |
+| Restructure code without changing behavior | `/refactoring`    |
+| Check your code against your vault        | `/review`         |
 
-```
-Read ~/.bocek/primitives/research.md and follow it.
-Cite how Stripe handles idempotency in their node SDK. Find conflicts
-between their docs and their actual code.
-```
-
-Research mode will clone the real SDK, read the real docs, and produce an evidence package with citations and conflicts built in — not a summary, not an endorsement. It writes the findings to `.bocek/vault/checkout/stripe-idempotency-research.md`.
-
-When the research is done, switch back to design and resume:
-
-```
-Read ~/.bocek/primitives/design.md and follow it.
-Resume. Latest decision was [[cart-expiry]]. Next: payment-success
-but order-creation-failure scenario.
-```
-
-Nothing's lost — `.bocek/state.md` tracks session continuity across restarts. A fresh Claude Code session can read it and pick up where you left off.
+Switching is just running a different slash command. There's no "end session" step. The mode file is the session state and it lives on disk — a fresh Claude Code window reads `state.md` and the current mode and picks up from the last resolved decision.
 
 ---
 
-## 4. From design to implementation
-
-When the vault is complete enough to ship, compile it:
-
-<TerminalBlock command="bocek vault compile checkout" title="~/your-project" />
-
-Compilation produces a per-feature structured file optimized for the model: constraints with rationale, contracts with type signatures, cross-feature dependencies. Regenerated on demand — you never hand-edit the compiled layer.
-
-Then swap to implementation:
-
-```
-Read ~/.bocek/primitives/implementation.md and follow it.
-Read the compiled vault for checkout. Implement the API.
-```
-
-Implementation mode enforces a simple rule: **every function starts with a quote from the vault contract it satisfies.** If a decision is missing, the model stops and tells you. It will not improvise. The enforcement hook will not let it write source files until a code mode is loaded.
-
----
-
-## 5. When to switch modes
-
-| You want to…                                    | Load                                 |
-| ------------------------------------------------ | ------------------------------------ |
-| Decide an approach                               | `design`                             |
-| Get evidence from real code or docs              | `research`                           |
-| Ship code against a complete vault               | `implementation`                     |
-| Investigate a failure with a stack trace         | `debugging`                          |
-| Restructure code without changing behavior       | `refactoring`                        |
-| Check your code against your vault decisions     | `review`                             |
-
-Switch by loading a different primitive. There's no "end session" step — the mode file is the session state, and it lives on disk.
-
----
-
-## 6. The commands you'll actually run
+## The CLI
 
 | Command        | What it does                                           |
 | -------------- | ------------------------------------------------------ |
-| `bocek on`     | Register enforcement hooks in this project             |
-| `bocek off`    | Remove hooks from this project                         |
-| `bocek status` | Show hook, mode, vault, and primitive state            |
+| `bocek on`     | Register hooks, install slash commands                 |
+| `bocek off`    | Remove hooks and Bocek-managed commands                |
+| `bocek status` | Show hooks, slash commands, mode, vault, primitives    |
 | `bocek update` | Pull the latest primitives and scripts                 |
 
-That's the whole CLI. Everything else happens in Claude Code.
+That's the whole surface. Everything else happens inside Claude Code.
 
 ---
 
 ## Removing Bocek
 
-Bocek lives in three places. Clean removal takes three steps, in this order.
+Three places to clean up, in this order.
 
-**1. Turn it off in every project that has it on.** Per-project hooks live in `.claude/settings.local.json`. `bocek off` removes the hook entry and leaves a `.bocek-backup` of the previous settings next to it.
+**1. Deactivate every project that has Bocek on.** Per-project hooks live in `.claude/settings.local.json`. `bocek off` removes the hook entries and the six slash commands it installed, leaving `.bocek-backup` next to the original.
 
 <TerminalBlock command="cd your-project && bocek off" title="~/your-project" />
 
-Repeat in every project where you ran `bocek on`. If you're not sure which projects are wired up, this one-liner surfaces them:
+Not sure which projects are wired up? This surfaces them:
 
 <TerminalBlock command="grep -rl 'enforce-mode.sh' ~ --include='settings.local.json' 2>/dev/null" title="~" prompt="$" />
 
-**2. Remove the install directory.** This deletes the primitives, the toggle script, and the enforcement hook binary.
+**2. Remove the install directory.**
 
 <TerminalBlock command="rm -rf ~/.bocek" title="~" prompt="$" />
 
-**3. Remove the shell hook.** The installer added two lines to your shell config (`~/.zshrc`, `~/.bashrc`, or `~/.profile`) — a `# bocek` marker and an `export PATH=...` line. Delete both, then restart your shell.
+**3. Remove the shell hook.** The installer added two lines to `~/.zshrc`, `~/.bashrc`, or `~/.config/fish/config.fish` — a `# bocek` comment and a `PATH` export. Delete both, then restart your shell.
 
-Your vaults under `.bocek/vault/` inside individual projects are not touched — they're part of the project, not the install. Remove them manually if you want them gone.
+Your vaults under `.bocek/vault/` inside individual projects are untouched — they're part of the project, not the install. Delete them manually if you want them gone.
