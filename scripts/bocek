@@ -24,6 +24,7 @@ PRIMITIVES=(design research implementation debugging refactoring review)
 MANAGED_MARKER="<!-- bocek:managed -->"
 ENFORCE_CMD="~/.bocek/scripts/enforce-mode.sh"
 BANNER_CMD="~/.bocek/scripts/session-banner.sh"
+PRELOAD_CMD="~/.bocek/scripts/preload-calibration.sh"
 
 # --- Commands ---
 
@@ -46,26 +47,40 @@ cmd_on() {
     cp "$SETTINGS_FILE" "${SETTINGS_FILE}.bocek-backup"
   fi
 
-  # Merge Bocek hook entries (idempotent) — PreToolUse enforcement + SessionStart banner
+  # Merge Bocek hook entries (idempotent) — PreToolUse enforcement + SessionStart banner + UserPromptSubmit preload
   local BOCEK_HOOKS
-  BOCEK_HOOKS=$(jq -n --arg enforce "$ENFORCE_CMD" --arg banner "$BANNER_CMD" '{
-    pre: { matcher: "Edit|Write|Bash", hooks: [ { type: "command", command: $enforce, timeout: 5 } ] },
-    start: { hooks: [ { type: "command", command: $banner, timeout: 5 } ] }
-  }')
+  BOCEK_HOOKS=$(jq -n \
+    --arg enforce "$ENFORCE_CMD" \
+    --arg banner "$BANNER_CMD" \
+    --arg preload "$PRELOAD_CMD" \
+    '{
+      pre: { matcher: "Edit|Write|Bash", hooks: [ { type: "command", command: $enforce, timeout: 5 } ] },
+      start: { hooks: [ { type: "command", command: $banner, timeout: 5 } ] },
+      prompt: { hooks: [ { type: "command", command: $preload, timeout: 5 } ] }
+    }')
 
   local MERGED
-  MERGED=$(echo "$CURRENT" | jq --argjson bocek "$BOCEK_HOOKS" --arg enforce "$ENFORCE_CMD" --arg banner "$BANNER_CMD" '
+  MERGED=$(echo "$CURRENT" | jq \
+    --argjson bocek "$BOCEK_HOOKS" \
+    --arg enforce "$ENFORCE_CMD" \
+    --arg banner "$BANNER_CMD" \
+    --arg preload "$PRELOAD_CMD" \
+    '
     . as $base
     | ($base.hooks // {}) as $h
     | ($h.PreToolUse // []) as $pre
     | ($h.SessionStart // []) as $start
+    | ($h.UserPromptSubmit // []) as $prompt
     | (if ($pre | map(select(.hooks[0].command == $enforce)) | length) > 0
        then $pre
        else $pre + [$bocek.pre] end) as $pre2
     | (if ($start | map(select(.hooks[0].command == $banner)) | length) > 0
        then $start
        else $start + [$bocek.start] end) as $start2
-    | $base * { hooks: ($h + { PreToolUse: $pre2, SessionStart: $start2 }) }
+    | (if ($prompt | map(select(.hooks[0].command == $preload)) | length) > 0
+       then $prompt
+       else $prompt + [$bocek.prompt] end) as $prompt2
+    | $base * { hooks: ($h + { PreToolUse: $pre2, SessionStart: $start2, UserPromptSubmit: $prompt2 }) }
   ')
 
   # Validate before writing
@@ -106,7 +121,7 @@ EOF
     grep -q "settings.local.json" "$PROJECT_ROOT/.gitignore" || echo ".claude/settings.local.json" >> "$PROJECT_ROOT/.gitignore"
   fi
 
-  echo "bocek: hooks registered (PreToolUse enforcement + SessionStart banner)."
+  echo "bocek: hooks registered (PreToolUse enforcement + SessionStart banner + UserPromptSubmit calibration preload)."
   echo "bocek: slash commands installed at .claude/commands/ — /design, /research, /implementation, /debugging, /refactoring, /review"
   if [ "${#skipped[@]}" -gt 0 ]; then
     echo "bocek: skipped pre-existing unmanaged commands: ${skipped[*]} (remove them and re-run 'bocek on' to install)"
@@ -145,7 +160,11 @@ cmd_off() {
 
   # Remove Bocek hook entries, preserve everything else
   local CLEANED
-  CLEANED=$(cat "$SETTINGS_FILE" | jq --arg enforce "$ENFORCE_CMD" --arg banner "$BANNER_CMD" '
+  CLEANED=$(cat "$SETTINGS_FILE" | jq \
+    --arg enforce "$ENFORCE_CMD" \
+    --arg banner "$BANNER_CMD" \
+    --arg preload "$PRELOAD_CMD" \
+    '
     (if .hooks.PreToolUse then
       .hooks.PreToolUse |= map(select(.hooks[0].command != $enforce))
       | if (.hooks.PreToolUse | length) == 0 then del(.hooks.PreToolUse) else . end
@@ -153,6 +172,10 @@ cmd_off() {
     | (if .hooks.SessionStart then
         .hooks.SessionStart |= map(select(.hooks[0].command != $banner))
         | if (.hooks.SessionStart | length) == 0 then del(.hooks.SessionStart) else . end
+      else . end)
+    | (if .hooks.UserPromptSubmit then
+        .hooks.UserPromptSubmit |= map(select(.hooks[0].command != $preload))
+        | if (.hooks.UserPromptSubmit | length) == 0 then del(.hooks.UserPromptSubmit) else . end
       else . end)
     | if (.hooks // {} | length) == 0 then del(.hooks) else . end
   ')
@@ -176,19 +199,22 @@ cmd_status() {
 
   # Check hook registration
   local SETTINGS_FILE="$PROJECT_ROOT/.claude/settings.local.json"
-  local has_enforce=0 has_banner=0
+  local has_enforce=0 has_banner=0 has_preload=0
   if [ -f "$SETTINGS_FILE" ]; then
     jq -e --arg cmd "$ENFORCE_CMD" '.hooks.PreToolUse[]? | select(.hooks[0].command == $cmd)' "$SETTINGS_FILE" >/dev/null 2>&1 && has_enforce=1
     jq -e --arg cmd "$BANNER_CMD"  '.hooks.SessionStart[]? | select(.hooks[0].command == $cmd)' "$SETTINGS_FILE" >/dev/null 2>&1 && has_banner=1
+    jq -e --arg cmd "$PRELOAD_CMD" '.hooks.UserPromptSubmit[]? | select(.hooks[0].command == $cmd)' "$SETTINGS_FILE" >/dev/null 2>&1 && has_preload=1
   fi
-  if [ "$has_enforce" -eq 1 ] && [ "$has_banner" -eq 1 ]; then
-    echo "Hooks: registered (enforcement + banner)"
-  elif [ "$has_enforce" -eq 1 ]; then
-    echo "Hooks: enforcement only (run 'bocek on' to install banner)"
-  elif [ "$has_banner" -eq 1 ]; then
-    echo "Hooks: banner only (run 'bocek on' to install enforcement)"
-  else
+  if [ "$has_enforce" -eq 1 ] && [ "$has_banner" -eq 1 ] && [ "$has_preload" -eq 1 ]; then
+    echo "Hooks: registered (enforcement + banner + preload)"
+  elif [ "$has_enforce" -eq 0 ] && [ "$has_banner" -eq 0 ] && [ "$has_preload" -eq 0 ]; then
     echo "Hooks: not registered (run 'bocek on')"
+  else
+    local parts=()
+    [ "$has_enforce" -eq 1 ] && parts+=("enforcement") || parts+=("no-enforcement")
+    [ "$has_banner" -eq 1 ]  && parts+=("banner")      || parts+=("no-banner")
+    [ "$has_preload" -eq 1 ] && parts+=("preload")     || parts+=("no-preload")
+    echo "Hooks: partial (${parts[*]}) — run 'bocek on' to reconcile"
   fi
 
   # Check slash commands
@@ -261,9 +287,11 @@ cmd_update() {
     cp scripts/bocek "$HOME/.bocek/bin/bocek"
     cp scripts/enforce-mode.sh "$HOME/.bocek/scripts/enforce-mode.sh"
     cp scripts/session-banner.sh "$HOME/.bocek/scripts/session-banner.sh"
+    cp scripts/preload-calibration.sh "$HOME/.bocek/scripts/preload-calibration.sh"
     chmod +x "$HOME/.bocek/bin/bocek"
     chmod +x "$HOME/.bocek/scripts/enforce-mode.sh"
     chmod +x "$HOME/.bocek/scripts/session-banner.sh"
+    chmod +x "$HOME/.bocek/scripts/preload-calibration.sh"
     echo "bocek: primitives and scripts updated."
   else
     echo "bocek: update failed. Check network and try again." >&2
