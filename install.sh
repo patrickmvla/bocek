@@ -81,11 +81,13 @@ cp "$REPO_DIR/scripts/bocek" "$BIN_DIR/bocek" || error "Failed to copy toggle sc
 # --- 5. Copy hook scripts ---
 cp "$REPO_DIR/scripts/enforce-mode.sh" "$SCRIPTS_DIR/enforce-mode.sh" || error "Failed to copy enforcement script"
 cp "$REPO_DIR/scripts/session-banner.sh" "$SCRIPTS_DIR/session-banner.sh" || error "Failed to copy session banner script"
+cp "$REPO_DIR/scripts/preload-calibration.sh" "$SCRIPTS_DIR/preload-calibration.sh" || error "Failed to copy calibration preload script"
 
 # --- 6. Set permissions ---
 chmod +x "$BIN_DIR/bocek"
 chmod +x "$SCRIPTS_DIR/enforce-mode.sh"
 chmod +x "$SCRIPTS_DIR/session-banner.sh"
+chmod +x "$SCRIPTS_DIR/preload-calibration.sh"
 
 # --- 7. PATH configuration ---
 if command -v bocek >/dev/null 2>&1; then
