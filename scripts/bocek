@@ -302,6 +302,12 @@ cmd_update() {
     chmod +x "$HOME/.bocek/scripts/preload-calibration.sh"
     chmod +x "$HOME/.bocek/scripts/preflight.sh"
     echo "bocek: primitives and scripts updated."
+    # IMPORTANT: exit here, not return. The cp above replaced the script
+    # bash is currently executing. If we let the function return, bash
+    # tries to read the next byte from the now-different file and hits
+    # garbage (line N of the new script at the old byte offset). Exiting
+    # here stops the read before that happens.
+    exit 0
   else
     echo "bocek: update failed. Check network and try again." >&2
     exit 1
