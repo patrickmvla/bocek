@@ -11,7 +11,57 @@ You've cloned an empty project. You want a checkout feature. The rest of this pa
 
 <TerminalBlock command="cd your-project && bocek on" title="~/your-project" />
 
-`bocek on` writes six slash commands into `.claude/commands/`, registers two hooks (enforcement + session banner), and creates `.bocek/mode` containing `idle`. Nothing else changes. Open Claude Code in the same directory.
+`bocek on` writes six slash commands into `.claude/commands/`, registers three hooks (enforcement + session banner + calibration preload), and creates `.bocek/mode` containing `idle`. Nothing else changes.
+
+---
+
+## 0. `bocek bootstrap` — capture project shape before designing anything
+
+The first decision is *project shape* — what's being built, scale, team, constraints, non-goals, success criteria. The meta-decision every other decision inherits from. The preflight routes you here on a greenfield repo.
+
+<TerminalBlock command="bocek bootstrap" title="~/your-project — interactive interview" />
+
+Eight questions, answer briefly, edit afterward. Writes `.bocek/vault/_shared/project-shape.md`:
+
+```markdown
+---
+type: decision
+features: [_shared]
+created: 2026-04-29
+confidence: high
+---
+
+# Project shape: Acme Checkout
+
+## What's being built
+Standalone checkout service. Owns cart, payment intent, capture,
+inventory decrement, order creation. Does NOT own catalog,
+fulfillment, customer profile.
+
+## Scale
+1k → 5k orders/day in 6mo; ~50k aspirational by 24mo.
+
+## Team
+3 backend (1 senior, 2 mid) + 30% SRE. Strong TS/Postgres/AWS.
+
+## Constraints
+p99 < 1.5s. PCI scope avoidance. AWS < $10k/mo. <1 page/week.
+
+## Explicit non-goals
+Single-region. USD only. No subscriptions. No saved cards.
+
+## Success criteria for v1
+99.9% success. p99 holds 30 days. Zero PCI incidents.
+Inventory drift < 0.1%.
+
+## Inherited by
+Every decision in this vault. Proposals violating these constraints
+are rejected, or this entry is updated *first*.
+```
+
+Every subsequent decision is anchored. When `/design` later sketches a multi-region failover, project-shape kills it before it reaches the vault — single-region is a non-goal, and the cost of changing that goes through *this* entry first.
+
+The same preflight detected project signals (TypeScript, Astro+React) and suggested `~/.bocek/idioms/typescript.md` — branded types, discriminated unions, end-to-end types, real services in tests over mocks, OpenTelemetry over print logging. `/design` and `/implementation` read it on activation and cite it as they go.
 
 ---
 
@@ -37,43 +87,78 @@ What that looks like in practice:
 
 You answer honestly. Sound reasoning gets accepted. Confident-but-wrong gets attacked with counter-evidence. No reasoning at all (`just use X`) gets refused. Impatience gets met with more pushback. Honest uncertainty gets helped — the model switches to surfacing options with evidence.
 
-When a question resolves, the decision lands in the vault:
+When a question resolves, the decision lands in the vault under a feature folder, not at the vault root. Path convention: `.bocek/vault/{feature}/{slug}.md` — feature folder required, slug kebab-case with no feature prefix.
 
 ```markdown
 ---
 type: decision
-features: [checkout]
-related: ["[[cart-expiry]]", "[[stripe-idempotency-research]]"]
+features: [checkout, inventory]
+related: ["[[checkout-api-contract]]", "[[stripe-idempotency-research]]"]
 created: 2026-04-17
 confidence: high
 ---
 
-# Optimistic locking for inventory decrement
+# Use optimistic locking for inventory management
 
-## Chosen
-Optimistic locking with retry. Reservation: 15 min from add-to-cart.
+## Decision
+Postgres `version` column. Conditional UPDATE on (id, version).
+On 0 rows affected: rollback, auto-refund the Stripe charge, return 409
+per [[checkout-api-contract]].
 
-## Rejected
-- Pessimistic row-level lock — blocks during the Stripe call, degrades
-  under flash sales.
-- No lock + reconcile — acceptable at low volume, breaks the moment
-  concurrent checkouts exceed write throughput.
+## Engineering substance applied
+- **Consistency:** SERIALIZABLE not required — CAS via UPDATE WHERE
+  version = $2 gives compare-and-swap at any isolation level.
+- **Concurrency:** optimistic, MVCC-backed. No deadlock surface.
+- **Failure semantics:** at-least-once Stripe charge + at-most-once
+  inventory write, reconciled via [[stripe-idempotency-research]] keys
+  and the auto-refund path on 409.
+- **Observability:** conflict-rate metric per product. Page on > 10%
+  sustained for 5min.
 
-## Rationale
-Steady-state writes under 50/sec. Flash sales not on roadmap. Conflict
-rate projected <2%, retry cost is cheap.
+## Production-grade gates
+- **Idiomatic:** standard pattern in Postgres+Drizzle/Prisma services
+  (Linear engineering blog, 2023).
+- **Industry-standard:** Shopify (post-mortem on flash sales, 2022),
+  GitHub (public source, 2024-Q4) — both ship optimistic locking
+  for the same reason.
+- **First-class:** native Postgres row versioning, not a custom mutex
+  table or advisory lock.
+
+## Rejected alternatives
+### Pessimistic locking (SELECT FOR UPDATE)
+**Wins when:** contention > 100 concurrent on same row + external
+call < 50ms. **Why not here:** holds row lock across the 200-800ms
+Stripe call, throughput collapses to 1-5/sec/product.
+
+### Redis-backed distributed mutex
+**Wins when:** state spans Postgres + cache, neither alone has
+the right locking primitive. **Why not here:** adds Redis-unavailable
+failure mode for no concurrency benefit Postgres doesn't provide.
+
+### CRDT-based counter (last-writer-wins)
+**Wins when:** multi-region with partition tolerance > consistency.
+**Why not here:** single-region; CRDT counters can't enforce
+non-negative invariant.
 
 ## Failure mode
-Under sustained writes above ~200/sec, retry storms. Revisit when we
-get close.
+Retry storm at sustained 500+ concurrent on the same product. Without
+bounded retry, retries amplify load instead of reducing it.
+
+## Mitigations
+- Bounded retry (max 3) with exponential backoff.
+- Circuit breaker at 50% conflict-rate over 30s — returns 503 with
+  `Retry-After: 5`, lets the queue drain.
+- Page on conflict-rate > 10% sustained 5min — early warning.
 
 ## Revisit when
-- Flash-sale feature gets scoped.
-- Sustained write volume exceeds 200/sec.
-- Conflict rate observed above 5%.
+- Sustained contention > 50 writers/product (flash sales, drops).
+- Stripe charge latency > 1s consistently.
+- Multi-region rollout planned.
 ```
 
-You'll notice what's not there: no "this is a good approach because," no hedging, no summary paragraph. The vault captures the chosen path, the strongest rejected alternative with why it lost, the conditions under which the decision breaks, and what should trigger reopening it.
+You'll notice what's *not* there: no "this is a good approach because," no hedging, no summary paragraph. What *is* there: the chosen path with engineering substance named (consistency, concurrency, failure semantics, observability — the principles design wields), three production-grade gates explicitly checked with named systems, three rejected alternatives each with the conditions under which they'd win, the failure mode and its mitigations, and the conditions that should trigger reopening.
+
+This is the production-grade default, not aspirational. Every decision-class entry should clear those three gates — *idiomatic to this stack/version, industry-standard with ≥2 named systems, first-class not workaround* — before it's worth challenging in the first place.
 
 ---
 
@@ -271,26 +356,30 @@ After a few sessions, `.bocek/` in your project root looks like this:
 ├── mode                          ← current mode, gitignored
 ├── state.md                      ← active feature, last decision, next question
 └── vault/
-    ├── index.md                  ← LLM entry point, vault_version in frontmatter
+    ├── index.md                  ← entry point, vault_version in frontmatter
     ├── .compiled/                ← gitignored, regenerated on demand
     │   ├── checkout.md
     │   └── auth.md
+    ├── _shared/
+    │   └── project-shape.md      ← meta-decision: what / scale / team /
+    │                              constraints / non-goals / success criteria
     ├── checkout/
     │   ├── cart-expiry.md                 (decision)
     │   ├── optimistic-locking.md          (decision)
     │   ├── stripe-idempotency-research.md (research)
-    │   ├── payment-api-contract.md        (contract)
-    │   └── inventory-drift-discovery.md   (context, from /debugging)
-    ├── auth/
-    │   └── session-format.md              (decision)
-    └── inventory-locking-patterns.md      ← cross-feature, at vault root
+    │   ├── checkout-api-contract.md       (contract)
+    │   └── discovery-version-read-race.md (discovery, from /debugging)
+    └── auth/
+        └── session-format.md              (decision)
 ```
 
 Worth knowing:
 
-- **Feature folders are optional.** Files that span multiple features live at the vault root. Wikilinks matter more than folder layout.
+- **Feature folders are required.** Every entry lives in `vault/{feature}/{slug}.md`. Cross-cutting entries (project shape, engineering standards) go in `_shared/`. A flat `vault/` becomes unreadable past a handful of entries — the preflight flags loose entries on every activation, and `bocek vault organize` migrates them.
+- **Slug naming.** Kebab-case, no feature prefix (the folder already conveys the feature). `optimistic-locking.md`, not `checkout-optimistic-locking.md`. For research, `{topic}-research.md`. For reviews, `review-YYYY-MM-DD.md`. For discoveries, `discovery-{slug}.md`.
+- **Wikilinks resolve by filename, not path.** `[[optimistic-locking]]` works regardless of which folder the entry lives in — moving entries between folders doesn't break refs.
 - **`.compiled/` is never hand-edited.** Implementation mode regenerates per-feature files when any source upstream has changed.
-- **`mode` and `state.md` sit above `vault/`.** They're session state, not preserved knowledge. `mode` is gitignored; `state.md` is committed for v1 solo use (the team-workflow version will likely flip this).
+- **`mode` and `state.md` sit above `vault/`.** Session state, not preserved knowledge. `mode` is gitignored; `state.md` is committed for v1 solo use (the team-workflow version will likely flip this).
 - **Commit `vault/`. Ignore `.compiled/`.** The `.gitignore` entry is added automatically the first time the vault is created.
 
 ---
@@ -312,12 +401,14 @@ Switching is just running a different slash command. There's no "end session" st
 
 ## The CLI
 
-| Command        | What it does                                           |
-| -------------- | ------------------------------------------------------ |
-| `bocek on`     | Register hooks, install slash commands                 |
-| `bocek off`    | Remove hooks and Bocek-managed commands                |
-| `bocek status` | Show hooks, slash commands, mode, vault, primitives    |
-| `bocek update` | Pull the latest primitives and scripts                 |
+| Command                 | What it does                                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `bocek on`              | Register hooks, install slash commands                                                                                                |
+| `bocek off`             | Remove hooks and Bocek-managed commands                                                                                               |
+| `bocek status`          | Show hooks, slash commands, mode, vault, primitives                                                                                   |
+| `bocek update`          | Pull the latest primitives and scripts                                                                                                |
+| `bocek bootstrap`       | Greenfield onboarding — interactive interview that captures *project shape* (what / scale / team / constraints / non-goals / success) |
+| `bocek vault organize`  | Migrate loose vault entries (those written directly to `vault/` instead of `vault/{feature}/`) into the right folders                 |
 
 That's the whole surface. Everything else happens inside Claude Code.
 
