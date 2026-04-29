@@ -4,37 +4,37 @@ const modes = [
     name: "design",
     kind: "reasoning",
     demand:
-      "Defend every decision. The model attacks its own recommendations harder than yours.",
+      "Asked to wield ACID, CAP, isolation levels, failure semantics. Three gates per position: idiomatic, industry-standard, first-class. Adversarial only when calibrated.",
   },
   {
     name: "research",
     kind: "reasoning",
     demand:
-      "Clones real codebases, reads current docs, cross-checks academic sources. Evidence with conflicts built in — not summaries.",
+      "Triangulates production code + version-pinned docs + a contradiction probe. Source-quality tier per claim. Operational implications spelled out.",
   },
   {
     name: "implementation",
     kind: "code",
     demand:
-      "Ship from a complete vault. Missing decisions stop the model — it won't improvise.",
+      "Ships from a complete vault, citing the contract and idiom file inline. Every choice not in the contract gets flagged, never picked.",
   },
   {
     name: "debugging",
     kind: "code",
     demand:
-      "Bring the stack trace. No vibes. Vault tells it what's designed vs. broken.",
+      "Evidence-grounded. Failure lenses + five-whys. A fix isn't done unless you can explain why it failed AND why this fixes it.",
   },
   {
     name: "refactoring",
     kind: "code",
     demand:
-      "Code it can't explain doesn't get touched. If you can't either, the code stays.",
+      "Named upcoming change as justification. Test coverage as precondition. Each step independently reversible. No slipped-in improvements.",
   },
   {
     name: "review",
     kind: "reasoning",
     demand:
-      "Compare code to vault. Find where you drifted. Convenience is not an excuse.",
+      "Drift detection — every vault entry traced. Findings classified (drift / gap / orphan), severity rationaled, reproducible.",
   },
 ];
 ---

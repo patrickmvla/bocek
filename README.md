@@ -12,6 +12,7 @@ For engineers who want to use the model as a reasoning amplifier instead of a co
 - **Hook enforcement** — a bash script that runs outside the context window, blocking source file writes in reasoning modes (design, research, review). Zero tokens, non-bypassable.
 - **Dual-format vault** — human-readable (Obsidian-style knowledge graph) + compiled (structured markdown optimized for LLM consumption). Decisions, research, and contracts persist across sessions.
 - **Mental models** — domain activators that shift the model's probability distribution by naming tensions and surfacing hard-won insights. Not checklists.
+- **Idioms** — ecosystem-specific quality bars (TypeScript, Go, Rust, Python, …). Concrete answers to *"what's idiomatic for this stack?"* — auto-suggested by the preflight when it detects the matching language signal.
 - **Zero startup cost** — nothing registers with Claude Code until invoked. No context tax until you choose to load a primitive.
 
 ## Install
@@ -51,6 +52,18 @@ bocek on
 | `bocek off` | Remove hooks from this project |
 | `bocek status` | Show hook, mode, vault, and primitive status |
 | `bocek update` | Pull latest primitives and scripts |
+| `bocek bootstrap` | Greenfield onboarding — interactive interview that captures *project shape* (what / scale / team / constraints / non-goals / success criteria) and writes the meta-decision every other decision inherits from |
+| `bocek vault organize` | Migrate loose vault entries (those written directly to `vault/` instead of `vault/{feature}/`) into their correct feature folders, derived from each entry's `features:` frontmatter |
+
+### Onboarding
+
+Bocek classifies the project into one of three states on every preflight:
+
+- **Greenfield** (no vault, minimal code) — run `bocek bootstrap` for an interactive project-shape interview, then `/design` for the first feature.
+- **Brownfield with vault** — `/design`, `/research`, etc. work as documented; the vault is your context.
+- **Brownfield without vault** — the preflight prompts you to choose: forward-vault only (vault from now on, accept the past is undocumented) or reverse archaeology (research mode reads code + git log to extract the load-bearing decisions). See `~/.bocek/references/shared/onboarding.md`.
+
+Existing project with loose vault entries from earlier sessions? Run `bocek vault organize` to migrate them into the correct `{feature}/` folders.
 
 ### Modes
 
@@ -65,12 +78,14 @@ bocek on
 
 ## How it works
 
-1. **Run a slash command** — e.g. `/design` in Claude Code. The command body reads the matching primitive from `~/.bocek/primitives/`.
-2. **The primitive sets the mode** — writes `design` to `.bocek/mode`
-3. **The hook enforces constraints** — blocks source file writes in reasoning modes, allows vault writes
-4. **Work produces vault entries** — decisions, research, contracts saved to `.bocek/vault/`
-5. **Implementation reads the vault** — compiled context constrains what code gets written
-6. **The vault travels with the code** — committed to the repo, available to every future session
+1. **Run a slash command** — e.g. `/design` in Claude Code. The command body invokes `~/.bocek/scripts/preflight.sh design`.
+2. **Preflight orients the model** — sets `.bocek/mode`, prints prior mode + vault state + recent checkouts + project signals (greps `package.json`/`go.mod`/`Cargo.toml`/`pyproject.toml`/etc.) + suggested mental models + eager references for the mode. The model reads this before forming any response.
+3. **The primitive loads** — reads the eager references the preflight named, scans `.bocek/vault/index.md` and `.bocek/state.md`, then acknowledges the orientation in one line before operating.
+4. **The hook enforces constraints** — `enforce-mode.sh` runs outside the context window, blocking source file writes in reasoning modes, allowing vault writes.
+5. **Work produces vault entries** — decisions, research, contracts saved to `.bocek/vault/`.
+6. **Modes hand off explicitly** — every primitive has a `Handoff` section naming valid successors and the contract each requires (e.g. `/design` → `/implementation` only when the vault entry contains chosen path + rejected alternative + implementable contract). The model proposes the switch; the human runs the slash command.
+7. **Implementation reads the vault** — compiled context constrains what code gets written.
+8. **The vault travels with the code** — committed to the repo, available to every future session.
 
 ## Vault
 

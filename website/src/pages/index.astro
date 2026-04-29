@@ -29,10 +29,10 @@ const installCmd =
       <h1
         class="font-heading text-4xl font-semibold tracking-tight text-foreground sm:text-6xl sm:leading-[1.05]"
       >
-        Claude Code with modes,
+        Claude Code with modes, hooks,
         <br />
         <span class="text-muted-foreground"
-          >and a vault that remembers why.</span
+          >and a vault that anchors why.</span
         >
       </h1>
 
@@ -85,37 +85,53 @@ const installCmd =
   <ChapterHeading
     id="problem"
     number="01"
-    title="How mediocre software gets written with an AI assistant."
+    title="A coding harness without project anchors regresses to the training-data median."
     kicker="the problem"
   >
     <div class="space-y-6 text-base leading-relaxed text-muted-foreground">
       <p>
-        Day one. You type
-        <span class="text-foreground">"build me a checkout API."</span> The model
-        generates route handlers from its training-data defaults. Nobody asked
-        which inventory locking strategy applied under your write volume.
-        Nobody checked how Stripe actually handles idempotency. Nobody wrote
-        down why REST instead of GraphQL. It compiled, the happy path works,
-        you move on.
+        A coding harness is the software wrapping a language model — the
+        orchestration loop, tools, context management, memory, guardrails.
+        Claude Code is the harness around Claude. Cursor, Aider, Continue —
+        each ships its own. By Anthropic's own framing, only ~1.6% of Claude
+        Code's codebase is AI decision logic; the remaining ~98.4% is
+        operational infrastructure. Every component encodes an assumption
+        about what the model can't do on its own.
       </p>
       <p>
-        Month three. You ask the model to add a feature. It doesn't know auth
-        was supposed to be JWT with a 15-minute expiry — that decision was
-        never made, only assumed. It generates session-based auth. The project
-        now has two auth systems. Nobody can tell you why.
+        What none of these harnesses ship is project-specific anchoring. With
+        no recorded decisions constraining output, no project-specific
+        quality bar, no mode that distinguishes reasoning from coding, the
+        agent's output regresses to the median of its training corpus. You
+        ask for a checkout API and you get the median checkout API — route
+        handlers from training-data defaults, no inventory-locking strategy
+        chosen for <em>your</em> write volume, no awareness of how Stripe
+        actually handles idempotency, no record of why REST instead of GraphQL.
       </p>
       <p>
-        Month six. Inventory deadlocks under load. You ask the model to fix
-        it. It doesn't know the locking strategy was supposed to be deliberate
-        — because it wasn't. It "fixes" the deadlock by removing the lock.
-        Inventory goes negative in production.
+        The compounding is structural, not narrative. Each ungrounded
+        generation adds median-pattern code to the project. The next
+        generation reads the project, sees the median pattern, treats it as
+        evidence of intent, reinforces it. The codebase converges on the
+        training distribution, not on the project's actual constraints. By
+        generation twenty, the agent has no way to tell which behaviors are
+        deliberate and which are accidents — and neither do you.
       </p>
 
       <p class="text-foreground">
-        This is compounding. Every ungrounded decision makes the next decision
-        worse, because the model has less ground truth to reason from. By
-        decision twenty, the model can't help — it doesn't know which
-        behaviors are intentional and which are accidents. Neither do you.
+        Bocek is a meta-harness — additional scaffolding on top of the existing
+        coding harness that encodes the project-specific layer the underlying
+        harness can't reliably produce alone. Slash-command primitives that
+        prescribe engineering discipline (substance, gates, ceiling protocols).
+        A <code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+          >PreToolUse</code
+        > hook that enforces the design/code boundary at the system level.
+        Stack-specific idiom files that anchor output to the actual ecosystem.
+        A versioned vault that carries decisions, contracts, and discoveries
+        across sessions. The model writes to the vault, not to source files,
+        until you switch modes — that's a structural guarantee the underlying
+        harness doesn't provide.
       </p>
     </div>
   </ChapterHeading>
@@ -124,23 +140,24 @@ const installCmd =
   <ChapterHeading
     id="shift"
     number="02"
-    title="The model knows more than it gives you."
+    title="The model is a senior systems engineer if you let it be."
     kicker="the shift"
     variant="alt"
   >
     <div class="space-y-6 text-base leading-relaxed text-muted-foreground">
       <p>
-        An LLM is a prediction engine. It produces the most statistically
-        likely output given its training data, which is mostly average code —
-        Stack Overflow, tutorials, boilerplate, unremarkable production repos.
-        Ask for output and you get the median of all that.
+        An LLM is a prediction engine. Its default output is the
+        <em>most common</em> pattern in training data — Stack Overflow,
+        tutorials, boilerplate, unremarkable production repos. Ask for output
+        and you get the median.
       </p>
       <p>
-        But the same model has read every architectural post-mortem, every
-        scaling failure, every production incident write-up that was
-        published. It knows how Stripe handles idempotency. It knows why
-        optimistic locking fails under flash sales. That knowledge sits below
-        the surface — a strong default pulls it toward the average.
+        But the same model has read every Spanner paper, every Stripe
+        engineering post, every Postgres docs page, every CAP-vs-PACELC
+        re-derivation, every Shopify post-mortem on flash-sale inventory
+        contention. It knows ACID, isolation levels, idempotency keys,
+        consensus tradeoffs, observability primitives. That knowledge sits
+        below the surface — a strong default pulls it toward the average.
       </p>
 
       <div
@@ -171,35 +188,55 @@ const installCmd =
             ></span>
             <span
               class="font-heading text-[10px] uppercase tracking-[0.22em] text-[color:var(--accent-amber)]"
-              >evidence source + adversarial reviewer</span
+              >senior systems engineer</span
             >
           </div>
           <p class="font-mono text-[13px] leading-relaxed text-foreground">
-            "Show me how Stripe handles idempotency in their node SDK. Then
-            attack my approach to inventory locking."
+            "What's the consistency model on the write path? Name two
+            production systems doing this at our scale and one that
+            doesn't and why."
           </p>
           <p class="mt-3 text-xs leading-relaxed text-muted-foreground">
-            → the knowledge below the surface, filtered through your judgment
+            → ACID, CAP, named systems, named tradeoffs — engineering
+            substance, not vibes
           </p>
         </div>
       </div>
 
       <p>
-        Bocek's primitives encode this shift as an operational contract. In
-        <code
+        The <code
           class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
-          >design</code
-        > mode the model doesn't accept your plan — it takes a position,
-        attacks its own recommendation harder than yours, and calibrates
-        pushback to the quality of your reasoning. Sound reasoning gets
-        accepted. Confident-but-wrong gets torn apart. Honest uncertainty gets
-        helped. Impatience gets met with more pushback, because skipping
-        reasoning is the signal that reasoning is needed.
+          >/design</code
+        > primitive asks the model to clear three gates before staking a
+        position: <strong class="text-foreground">idiomatic</strong> to
+        <em>this</em> stack and version (React 19, Postgres 16 — not what
+        docs taught five years ago); <strong class="text-foreground"
+          >industry-standard</strong
+        > with ≥2 named production systems (Stripe + Shopify, not "ten blog
+        posts"); <strong class="text-foreground">first-class</strong> not
+        workaround (platform abstractions, not a fight against them).
       </p>
+
+      <p>
+        Then the engineering: name the principles in play. <em
+          >"Strong consistency on writes per ACID-I, eventual on reads —
+          Postgres + read replicas, not Cassandra."</em
+        > Not <em>"we'll use a database."</em>
+      </p>
+
+      <p>
+        Default register is collaborative — you bring context, the model
+        brings substance. Adversarial pressure is calibrated to the signal:
+        confident-but-wrong gets counter-evidence, hand-waving gets
+        decomposed, honest uncertainty gets helped. A tool, not the frame.
+      </p>
+
       <p class="text-foreground">
-        This is code review, not conversation. You provide taste, context, and
-        the final call. The model provides evidence, challenges, and
-        execution. When it pushes back, that's the system working.
+        Stack-specific idioms (<code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+          >~/.bocek/idioms/typescript.md</code
+        > and siblings) ship the production-grade default per ecosystem.
+        Preflight auto-suggests the matching one.
       </p>
     </div>
   </ChapterHeading>
@@ -261,22 +298,32 @@ Checkout flow. Start with the decisions I haven't made.</code></pre>
       <pre
         class="overflow-x-auto rounded-lg border border-border/60 bg-card px-5 py-4 font-mono text-[12px] leading-relaxed text-foreground"><code>.bocek/vault/checkout/optimistic-locking.md
 
-# Optimistic locking for inventory decrement
+# Use optimistic locking for inventory management
 
-## Chosen
-Optimistic locking with retry. Reservation: 15 min from add-to-cart.
+## Decision
+Postgres `version` column, conditional UPDATE on (id, version).
+On 0 rows affected: rollback, auto-refund Stripe, return 409.
 
-## Rejected
-- Pessimistic row-level lock — blocks during the Stripe call.
-- No lock + reconcile — breaks above write throughput.
+## Engineering substance applied
+- Consistency: CAS via UPDATE WHERE version = $2 — no SERIALIZABLE
+  required, no deadlock surface.
+- Failure semantics: at-least-once Stripe + at-most-once inventory,
+  reconciled via [[stripe-idempotency-research]].
+- Observability: page on conflict-rate &gt; 10% sustained 5min.
 
-## Rationale
-Steady-state writes under 50/sec. Flash sales not on roadmap.
-Conflict rate projected &lt;2%, retry cost is cheap.
+## Production-grade gates
+- Idiomatic — standard Postgres+Drizzle pattern.
+- Industry-standard — Shopify (post-mortem, 2022), GitHub (public
+  source, 2024).
+- First-class — native row versioning, not a custom mutex table.
+
+## Rejected — pessimistic (SELECT FOR UPDATE)
+Wins at contention &gt; 100 + external call &lt; 50ms. Not here:
+the 200-800ms Stripe call held inside a row lock collapses
+throughput to 1-5/sec/product.
 
 ## Revisit when
-- Flash-sale feature gets scoped.
-- Sustained write volume exceeds 200/sec.</code></pre>
+Sustained contention &gt; 50 writers/product, or Stripe latency &gt; 1s.</code></pre>
 
       <p>
         When the vault holds enough decisions to ship, you type <code
@@ -470,6 +517,50 @@ Conflict rate projected &lt;2%, retry cost is cheap.
       >. No persona loaded, no skills attached, no always-on system prompt.
       Every token in context is a token you chose to load.
     </p>
+
+    <div
+      class="mt-12 rounded-lg border border-border/60 bg-background-alt/30 px-6 py-5"
+    >
+      <div
+        class="mb-3 font-heading text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground"
+      >
+        what bocek does not do
+      </div>
+      <ul
+        class="space-y-2 text-sm leading-relaxed text-muted-foreground"
+      >
+        <li>
+          <strong class="text-foreground">Validate vault entry content.</strong>
+          The hook blocks file writes outside <code
+            class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+            >.bocek/</code
+          >. It does not check whether a vault entry has the prescribed
+          sections (engineering substance, rejected alternatives,
+          production-grade gates). The human carries the quality bar.
+        </li>
+        <li>
+          <strong class="text-foreground"
+            >Prevent the model from drifting in a long session.</strong
+          >
+          Primitive instructions decay with context. Restart on noticeable
+          drift. The vault is what survives.
+        </li>
+        <li>
+          <strong class="text-foreground"
+            >Guarantee any specific behavior.</strong
+          >
+          Bocek prescribes. The model executes those prescriptions most of
+          the time, and sometimes doesn't. The system creates conditions
+          for better engineering — it doesn't enforce that engineering
+          happen.
+        </li>
+        <li>
+          <strong class="text-foreground">Replace human review.</strong>
+          A vault that grows without an attentive human grows shallow.
+          Read entries. Push back on thin ones. The discipline is yours.
+        </li>
+      </ul>
+    </div>
   </ChapterHeading>
 
   <!-- 06 — the vault -->
@@ -484,14 +575,64 @@ Conflict rate projected &lt;2%, retry cost is cheap.
       class="mb-10 max-w-2xl text-base leading-relaxed text-muted-foreground"
     >
       The vault is two representations of the same knowledge. The source of
-      truth is Obsidian-style markdown — YAML frontmatter, wikilinks, optional
-      feature folders — so humans can read and cross-reference it. A compiled
+      truth is Obsidian-style markdown — YAML frontmatter, wikilinks, feature
+      folders — so humans can read and cross-reference it. A compiled
       per-feature layer is generated on demand by implementation mode when
       source files change. You never hand-edit the compiled layer. You commit
       the source.
     </p>
 
     <VaultCompare />
+
+    <div class="mt-12 grid gap-6 sm:grid-cols-3">
+      <div>
+        <div
+          class="mb-2 font-heading text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground"
+        >
+          path convention
+        </div>
+        <p class="text-sm leading-relaxed text-muted-foreground">
+          Entries live at <code
+            class="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground"
+            >vault/&#123;feature&#125;/&#123;slug&#125;.md</code
+          >. Cross-cutting in <code
+            class="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground"
+            >_shared/</code
+          >. Preflight flags loose entries; <code
+            class="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground"
+            >bocek vault organize</code
+          > migrates them.
+        </p>
+      </div>
+      <div>
+        <div
+          class="mb-2 font-heading text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground"
+        >
+          project shape
+        </div>
+        <p class="text-sm leading-relaxed text-muted-foreground">
+          <code
+            class="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground"
+            >_shared/project-shape.md</code
+          > — the meta-decision (what / scale / team / constraints / non-goals
+          / success). Every other decision inherits its constraints.
+        </p>
+      </div>
+      <div>
+        <div
+          class="mb-2 font-heading text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground"
+        >
+          idioms
+        </div>
+        <p class="text-sm leading-relaxed text-muted-foreground">
+          <code
+            class="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground"
+            >~/.bocek/idioms/&#123;stack&#125;.md</code
+          > — production-grade defaults per ecosystem. Auto-suggested when
+          preflight detects the stack.
+        </p>
+      </div>
+    </div>
 
     <p
       class="mt-10 max-w-2xl text-sm leading-relaxed text-muted-foreground"
@@ -522,7 +663,7 @@ Conflict rate projected &lt;2%, retry cost is cheap.
       <h2
         class="mb-8 font-heading text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
       >
-        Install. Activate. Design something you can defend.
+        Install. Activate. Design from your project's actual constraints.
       </h2>
       <div class="space-y-4">
         <TerminalBlock command={installCmd} title="~ — install bocek" />
@@ -534,15 +675,115 @@ Conflict rate projected &lt;2%, retry cost is cheap.
       <p
         class="mt-6 max-w-2xl text-sm leading-relaxed text-muted-foreground"
       >
-        Open Claude Code in the same directory. Run <code
-          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
-          >/design</code
-        > and start with a real decision — the one you've been avoiding.
         Requires git, curl, and jq. Nothing else gets touched until you
         activate a project.
       </p>
+
+      <h3
+        class="mt-12 mb-4 font-heading text-base font-semibold tracking-tight text-foreground"
+      >
+        The preflight classifies your project, then routes you
+      </h3>
       <p
-        class="mt-6 text-sm leading-relaxed text-muted-foreground"
+        class="mb-6 max-w-2xl text-sm leading-relaxed text-muted-foreground"
+      >
+        A bash preflight runs before each mode and prints orientation —
+        prior mode, vault state, project signals from <code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+          >package.json</code
+        > / <code
+          class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+          >go.mod</code
+        > / etc., suggested mental models, matching idiom file. Three states,
+        three paths:
+      </p>
+
+      <div class="space-y-3">
+        <div
+          class="rounded-lg border border-border/60 bg-background-alt/30 px-5 py-4"
+        >
+          <div
+            class="mb-2 font-heading text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:var(--accent-amber)]"
+          >
+            greenfield
+          </div>
+          <p class="mb-3 text-sm leading-relaxed text-muted-foreground">
+            First decision is <em>project shape</em>. Bootstrap captures it
+            interactively, then design forward.
+          </p>
+          <TerminalBlock command="bocek bootstrap" title="~/your-project" />
+        </div>
+
+        <div
+          class="rounded-lg border border-border/60 bg-background-alt/30 px-5 py-4"
+        >
+          <div
+            class="mb-2 font-heading text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:var(--accent-amber)]"
+          >
+            brownfield with vault
+          </div>
+          <p class="text-sm leading-relaxed text-muted-foreground">
+            Continue. The vault is your context — run <code
+              class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+              >/design</code
+            > and pick up where the last session left off.
+          </p>
+        </div>
+
+        <div
+          class="rounded-lg border border-border/60 bg-background-alt/30 px-5 py-4"
+        >
+          <div
+            class="mb-2 font-heading text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:var(--accent-amber)]"
+          >
+            brownfield without vault
+          </div>
+          <p class="mb-2 text-sm leading-relaxed text-muted-foreground">
+            Pick a path before designing forward:
+          </p>
+          <ul
+            class="space-y-1.5 pl-4 text-sm leading-relaxed text-muted-foreground"
+          >
+            <li>
+              <strong class="text-foreground">Forward-vault only</strong> —
+              vault from now on, accept the past is undocumented.
+            </li>
+            <li>
+              <strong class="text-foreground">Reverse archaeology</strong> —
+              <code
+                class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+                >/research</code
+              > extracts the 5–10 load-bearing decisions from code + <code
+                class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+                >git log</code
+              > + interview.
+            </li>
+          </ul>
+        </div>
+
+        <div
+          class="rounded-lg border border-border/60 bg-background-alt/30 px-5 py-4"
+        >
+          <div
+            class="mb-2 font-heading text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground"
+          >
+            loose entries from earlier sessions
+          </div>
+          <p class="mb-3 text-sm leading-relaxed text-muted-foreground">
+            Migrates entries dumped in <code
+              class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+              >.bocek/vault/</code
+            > into the right <code
+              class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+              >vault/&#123;feature&#125;/</code
+            > folders, deriving the folder from each entry's frontmatter.
+          </p>
+          <TerminalBlock command="bocek vault organize" title="~/your-project" />
+        </div>
+      </div>
+
+      <p
+        class="mt-10 text-sm leading-relaxed text-muted-foreground"
       >
         The <a
           href="/guide"
