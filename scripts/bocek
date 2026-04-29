@@ -25,6 +25,7 @@ MANAGED_MARKER="<!-- bocek:managed -->"
 ENFORCE_CMD="~/.bocek/scripts/enforce-mode.sh"
 BANNER_CMD="~/.bocek/scripts/session-banner.sh"
 PRELOAD_CMD="~/.bocek/scripts/preload-calibration.sh"
+PREFLIGHT_CMD="~/.bocek/scripts/preflight.sh"
 
 # --- Commands ---
 
@@ -106,7 +107,13 @@ $MANAGED_MARKER
 description: Load the Bocek $p primitive and enter $p mode
 ---
 
-Read ~/.bocek/primitives/$p.md and follow it.
+Run the preflight script first to get oriented (it sets the mode and prints vault state, project signals, and suggested references):
+
+\`\`\`
+bash $PREFLIGHT_CMD $p
+\`\`\`
+
+Then read \`~/.bocek/primitives/$p.md\` and operate per its instructions, applying the preflight orientation as your starting context. Read the eager references the preflight printed before responding to the human.
 EOF
   done
 
@@ -288,10 +295,12 @@ cmd_update() {
     cp scripts/enforce-mode.sh "$HOME/.bocek/scripts/enforce-mode.sh"
     cp scripts/session-banner.sh "$HOME/.bocek/scripts/session-banner.sh"
     cp scripts/preload-calibration.sh "$HOME/.bocek/scripts/preload-calibration.sh"
+    cp scripts/preflight.sh "$HOME/.bocek/scripts/preflight.sh"
     chmod +x "$HOME/.bocek/bin/bocek"
     chmod +x "$HOME/.bocek/scripts/enforce-mode.sh"
     chmod +x "$HOME/.bocek/scripts/session-banner.sh"
     chmod +x "$HOME/.bocek/scripts/preload-calibration.sh"
+    chmod +x "$HOME/.bocek/scripts/preflight.sh"
     echo "bocek: primitives and scripts updated."
   else
     echo "bocek: update failed. Check network and try again." >&2
@@ -299,23 +308,260 @@ cmd_update() {
   fi
 }
 
+cmd_bootstrap() {
+  if [ ! -d "$PROJECT_ROOT/.git" ]; then
+    echo "bocek: warning — $PROJECT_ROOT is not a git repo (project-shape entries are usually committed)."
+    echo "       Continue anyway? (y/N)"
+    read -r reply
+    [[ "$reply" =~ ^[Yy]$ ]] || exit 0
+  fi
+
+  local SHAPE_FILE="$PROJECT_ROOT/.bocek/vault/_shared/project-shape.md"
+  if [ -f "$SHAPE_FILE" ]; then
+    echo "bocek: project-shape already exists at .bocek/vault/_shared/project-shape.md"
+    echo "       Re-bootstrap will overwrite. Continue? (y/N)"
+    read -r reply
+    [[ "$reply" =~ ^[Yy]$ ]] || exit 0
+  fi
+
+  echo ""
+  echo "=== Bocek Bootstrap — Project Shape ==="
+  echo ""
+  echo "Capturing the meta-decision that anchors every other decision in this project."
+  echo "Answer briefly. Press Enter to leave a section blank — you can edit later."
+  echo ""
+
+  local NAME WHAT SCALE_NOW SCALE_6MO SCALE_24MO TEAM CONSTRAINTS NONGOALS SUCCESS
+  read -r -p "Project name: " NAME
+  echo "What's being built? (one-line description)"
+  read -r WHAT
+  echo "Current scale (e.g. '1k orders/day, peak 50/min'):"
+  read -r SCALE_NOW
+  echo "6-month target scale:"
+  read -r SCALE_6MO
+  echo "24-month aspirational scale (or skip):"
+  read -r SCALE_24MO
+  echo "Team size and expertise (e.g. '3 backend, strong TS/Postgres, weak distributed-systems'):"
+  read -r TEAM
+  echo "Hard constraints (latency / regulatory / budget — comma-separated):"
+  read -r CONSTRAINTS
+  echo "Explicit non-goals (what we're NOT building — comma-separated):"
+  read -r NONGOALS
+  echo "Success criteria for v1 (how do we know we're done):"
+  read -r SUCCESS
+
+  local TODAY
+  TODAY=$(date +%Y-%m-%d)
+  mkdir -p "$PROJECT_ROOT/.bocek/vault/_shared"
+
+  cat > "$SHAPE_FILE" <<EOF
+---
+type: decision
+features: [_shared]
+related: []
+created: $TODAY
+confidence: high
+---
+
+# Project shape: ${NAME:-(unnamed project)}
+
+## What's being built
+${WHAT:-_TBD — describe what this system owns and explicitly what it does NOT own._}
+
+## Scale
+- **Current:** ${SCALE_NOW:-_TBD_}
+- **6-month target:** ${SCALE_6MO:-_TBD_}
+- **24-month aspirational:** ${SCALE_24MO:-_TBD — or remove this line if not relevant yet._}
+
+## Team
+${TEAM:-_TBD — size, expertise distribution, ownership window._}
+
+## Constraints
+${CONSTRAINTS:-_TBD — latency, regulatory, budget, operational._}
+
+## Explicit non-goals
+${NONGOALS:-_TBD — what this system is deliberately NOT doing. Non-goals are as load-bearing as goals._}
+
+## Success criteria for v1
+${SUCCESS:-_TBD — concrete and measurable: latency holds, drift below threshold, page rate below threshold._}
+
+## Inherited by
+Every decision in this vault inherits these constraints. When a proposal violates one, the proposal must either be rejected or this entry must be updated *first* with the named change.
+
+## Revisit when
+- Scale assumptions break significantly.
+- Team composition changes substantially.
+- Constraints change (regulatory, budget, ownership).
+- Success criteria drift in priority.
+EOF
+
+  # Initialize vault index if missing
+  local VAULT_INDEX="$PROJECT_ROOT/.bocek/vault/index.md"
+  if [ ! -f "$VAULT_INDEX" ]; then
+    cat > "$VAULT_INDEX" <<EOF
+---
+vault_version: 2
+---
+
+# Vault Index
+
+## _shared
+- [[project-shape]] — decision — ${NAME:-project} meta-context inherited by every decision
+EOF
+  fi
+
+  # Initialize state.md if missing
+  local STATE_FILE="$PROJECT_ROOT/.bocek/state.md"
+  if [ ! -f "$STATE_FILE" ]; then
+    cat > "$STATE_FILE" <<EOF
+## Current state
+- Feature: _shared (project shape captured)
+- Last resolved: [[project-shape]]
+- In progress: (no active feature yet)
+- Next: pick a feature to start designing
+EOF
+  fi
+
+  # Initialize mode if missing
+  local MODE_FILE="$PROJECT_ROOT/.bocek/mode"
+  if [ ! -f "$MODE_FILE" ]; then
+    echo "idle" > "$MODE_FILE"
+  fi
+
+  echo ""
+  echo "bocek: project-shape vaulted at .bocek/vault/_shared/project-shape.md"
+  echo "       Edit the file to refine — most users add explicit confidence levels"
+  echo "       on scale assumptions and more measurable success criteria."
+  echo ""
+  echo "Next: open Claude Code in this project and run /design to start the first feature."
+}
+
+cmd_vault_organize() {
+  local VAULT_DIR="$PROJECT_ROOT/.bocek/vault"
+
+  if [ ! -d "$VAULT_DIR" ]; then
+    echo "bocek: no vault at $VAULT_DIR — nothing to organize"
+    exit 0
+  fi
+
+  # Find loose entries (top-level .md files that aren't index.md)
+  local LOOSE
+  LOOSE=$(find "$VAULT_DIR" -mindepth 1 -maxdepth 1 -type f -name "*.md" -not -name "index.md" -printf "%f\n" 2>/dev/null | sort)
+
+  if [ -z "$LOOSE" ]; then
+    echo "bocek: no loose entries in $VAULT_DIR — vault already follows the path convention"
+    exit 0
+  fi
+
+  echo "=== Bocek Vault Organize ==="
+  echo ""
+  echo "Loose entries (in vault/ directly, not in {feature}/ folders):"
+  echo "$LOOSE" | sed 's|^|  |'
+  echo ""
+
+  local moved=0
+  local skipped=0
+  local manual=()
+  local in_git=0
+  [ -d "$PROJECT_ROOT/.git" ] && in_git=1
+
+  while IFS= read -r filename <&3; do
+    [ -z "$filename" ] && continue
+    local filepath="$VAULT_DIR/$filename"
+
+    # Extract first feature from frontmatter (handles features: [a, b] or features: [a])
+    local feature
+    feature=$(awk '
+      BEGIN { in_fm = 0 }
+      /^---$/ { if (in_fm) exit; in_fm = 1; next }
+      in_fm && /^features:/ {
+        if (match($0, /\[[^]]*\]/)) {
+          fs = substr($0, RSTART + 1, RLENGTH - 2)
+          n = split(fs, arr, /,[[:space:]]*/)
+          if (n > 0) {
+            gsub(/^[[:space:]"'"'"']+|[[:space:]"'"'"']+$/, "", arr[1])
+            if (length(arr[1]) > 0) {
+              print arr[1]
+              exit
+            }
+          }
+        }
+      }
+    ' "$filepath")
+
+    if [ -z "$feature" ]; then
+      echo "  $filename: no parseable features: in frontmatter"
+      echo "    [s] move to _shared/ (cross-cutting)"
+      echo "    [k] skip — fix manually"
+      echo -n "    Choice [s/k]: "
+      read -r choice
+      case "$choice" in
+        s|S) feature="_shared" ;;
+        *) skipped=$((skipped + 1)); manual+=("$filename"); continue ;;
+      esac
+    fi
+
+    local target_dir="$VAULT_DIR/$feature"
+    local target_path="$target_dir/$filename"
+
+    if [ -e "$target_path" ]; then
+      echo "  $filename: target already exists at $feature/$filename — skipping"
+      skipped=$((skipped + 1))
+      manual+=("$filename")
+      continue
+    fi
+
+    mkdir -p "$target_dir"
+
+    local rel_src="${filepath#"$PROJECT_ROOT"/}"
+    local rel_dst="${target_path#"$PROJECT_ROOT"/}"
+
+    if [ "$in_git" -eq 1 ] && git -C "$PROJECT_ROOT" ls-files --error-unmatch "$rel_src" >/dev/null 2>&1; then
+      git -C "$PROJECT_ROOT" mv "$rel_src" "$rel_dst" 2>/dev/null || mv "$filepath" "$target_path"
+    else
+      mv "$filepath" "$target_path"
+    fi
+
+    echo "  $filename → $feature/$filename"
+    moved=$((moved + 1))
+  done 3<<< "$LOOSE"
+
+  echo ""
+  echo "bocek: $moved entries organized; $skipped skipped"
+  if [ "${#manual[@]}" -gt 0 ]; then
+    echo "       Manual review needed for: ${manual[*]}"
+  fi
+  echo ""
+  echo "Wikilinks ([[name]]) still resolve — they're filename-based, not path-based."
+  echo "Review .bocek/vault/index.md if any entries are listed by path rather than wikilink."
+}
+
 # --- Usage ---
 usage() {
   echo "Usage: bocek <command>"
   echo ""
   echo "Commands:"
-  echo "  on       Register Bocek hooks in this project"
-  echo "  off      Remove Bocek hooks from this project"
-  echo "  status   Show Bocek status for this project"
-  echo "  update   Update primitives and scripts from remote"
+  echo "  on               Register Bocek hooks in this project"
+  echo "  off              Remove Bocek hooks from this project"
+  echo "  status           Show Bocek status for this project"
+  echo "  update           Update primitives and scripts from remote"
+  echo "  bootstrap        Interactive project-shape interview (greenfield onboarding)"
+  echo "  vault organize   Move loose vault entries into {feature}/ folders"
   echo ""
 }
 
 # --- Dispatch ---
 case "${1:-}" in
-  on)     cmd_on ;;
-  off)    cmd_off ;;
-  status) cmd_status ;;
-  update) cmd_update ;;
-  *)      usage; exit 1 ;;
+  on)        cmd_on ;;
+  off)       cmd_off ;;
+  status)    cmd_status ;;
+  update)    cmd_update ;;
+  bootstrap) cmd_bootstrap ;;
+  vault)
+    case "${2:-}" in
+      organize|organise) cmd_vault_organize ;;
+      *) echo "bocek: unknown vault subcommand '${2:-}'. Try: bocek vault organize" >&2; exit 1 ;;
+    esac
+    ;;
+  *)         usage; exit 1 ;;
 esac

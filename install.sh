@@ -24,7 +24,7 @@ BOCEK_HOME="$HOME/.bocek"
 BIN_DIR="$BOCEK_HOME/bin"
 SCRIPTS_DIR="$BOCEK_HOME/scripts"
 REPO_DIR="$BOCEK_HOME/.repo"
-LINKED_DIRS=(primitives references mental-models)
+LINKED_DIRS=(primitives references mental-models idioms)
 
 mkdir -p "$BIN_DIR" "$SCRIPTS_DIR"
 
@@ -88,12 +88,14 @@ cp "$REPO_DIR/scripts/bocek" "$BIN_DIR/bocek" || error "Failed to copy toggle sc
 cp "$REPO_DIR/scripts/enforce-mode.sh" "$SCRIPTS_DIR/enforce-mode.sh" || error "Failed to copy enforcement script"
 cp "$REPO_DIR/scripts/session-banner.sh" "$SCRIPTS_DIR/session-banner.sh" || error "Failed to copy session banner script"
 cp "$REPO_DIR/scripts/preload-calibration.sh" "$SCRIPTS_DIR/preload-calibration.sh" || error "Failed to copy calibration preload script"
+cp "$REPO_DIR/scripts/preflight.sh" "$SCRIPTS_DIR/preflight.sh" || error "Failed to copy preflight script"
 
 # --- 6. Set permissions ---
 chmod +x "$BIN_DIR/bocek"
 chmod +x "$SCRIPTS_DIR/enforce-mode.sh"
 chmod +x "$SCRIPTS_DIR/session-banner.sh"
 chmod +x "$SCRIPTS_DIR/preload-calibration.sh"
+chmod +x "$SCRIPTS_DIR/preflight.sh"
 
 # --- 7. PATH configuration ---
 if command -v bocek >/dev/null 2>&1; then
