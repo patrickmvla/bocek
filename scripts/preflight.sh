@@ -9,7 +9,6 @@
 set -euo pipefail
 
 MODE="${1:-idle}"
-PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
 
 # --- Validate mode ---
 case "$MODE" in
@@ -20,13 +19,32 @@ case "$MODE" in
     ;;
 esac
 
-# --- Project root: prefer git root if not set by Claude ---
-if [ -z "${CLAUDE_PROJECT_DIR:-}" ]; then
-  GIT_ROOT=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || true)
-  if [ -n "$GIT_ROOT" ]; then
-    PROJECT_ROOT="$GIT_ROOT"
+# --- Project root: walk up for .bocek/, then git root, then start dir ---
+# Walk-up handles invocation from any subdir (e.g. .bocek/vault/) without doubling the path.
+find_project_root() {
+  local start="$1"
+  local dir="$start"
+  while [ -n "$dir" ] && [ "$dir" != "/" ]; do
+    # Skip descendants of another .bocek/ — likely cruft from the path-doubling bug.
+    case "$dir" in
+      */.bocek/*) dir=$(dirname "$dir"); continue ;;
+    esac
+    if [ -d "$dir/.bocek" ]; then
+      printf '%s\n' "$dir"
+      return 0
+    fi
+    dir=$(dirname "$dir")
+  done
+  local git_root
+  git_root=$(git -C "$start" rev-parse --show-toplevel 2>/dev/null || true)
+  if [ -n "$git_root" ]; then
+    printf '%s\n' "$git_root"
+    return 0
   fi
-fi
+  printf '%s\n' "$start"
+}
+
+PROJECT_ROOT=$(find_project_root "${CLAUDE_PROJECT_DIR:-$PWD}")
 
 echo "=== Bocek Preflight — ${MODE} ==="
 
@@ -292,6 +310,13 @@ fi
 # --- 7. Write the mode (side effect) ---
 mkdir -p "$PROJECT_ROOT/.bocek"
 echo "$MODE" > "$MODE_FILE"
+# Read back — silent failure here would let the enforcement hook read a stale mode.
+WRITTEN=$(<"$MODE_FILE")
+WRITTEN="${WRITTEN//[[:space:]]/}"
+if [ "$WRITTEN" != "$MODE" ]; then
+  echo "preflight: mode write to $MODE_FILE did not take (expected '$MODE', got '$WRITTEN')" >&2
+  exit 1
+fi
 
 echo ""
 echo "=== Mode set: ${MODE}. Enforcement hook is active. ==="
