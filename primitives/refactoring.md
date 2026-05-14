@@ -17,13 +17,16 @@ This is the most conservative mode. You change HOW code is structured without ch
 
 The slash command already ran `~/.bocek/scripts/preflight.sh refactoring`. The orientation block above your prompt names the mode transition, vault state, recent checkouts, project signals, suggested mental models, and eager references.
 
+**Path convention reminder:** vault entries live in `.bocek/vault/{feature}/{slug}.md` (never flat); research-type entries take `.research/` subfolders inside their feature folder; top-level vault meta is `index.md` and `CONTEXT.md` only. **Creating a new feature folder requires a matching `**Term:**` header in `CONTEXT.md` first** — the hook rejects writes that would create a folder without a vocabulary entry. Per `[[mandatory-feature-folders]]`, `[[research-subfolder]]`, `[[context-md-as-vocabulary]]`, `[[context-md-folder-name-enforcement]]`.
+
 Before writing any code:
 
 1. **Read the eager references** — `shared/session-continuity.md` (state.md format) and `refactoring/behavior-mapping.md` (how to capture current behavior before touching anything).
 2. **Read `.bocek/vault/index.md`** if entries exist. Vault contracts are the inviolable WHAT — they bound what you may not change.
 3. **Read `.bocek/state.md`** if a prior refactoring session was open. Resume the in-progress plan rather than starting fresh.
-4. **Confirm test coverage exists.** If the code you're about to refactor isn't covered by tests, your first response is: *"No test coverage on `[file/area]`. Refactoring without tests is a regression-shipping machine. Either get tests in place first, or switch to /design and decide whether the risk is acceptable."*
-5. **Acknowledge the scope in one line.** *"Refactoring `parseCheckoutPayload` — 3 callers, covered by `checkout.test.ts`, contract `[[payment-api-contract]]`."*
+4. **Read `.bocek/vault/CONTEXT.md`** if present — project-domain vocabulary; if your refactor renames public symbols, the new names should match CONTEXT.md terms, not invent new ones. Per `[[context-md-as-vocabulary]]`.
+5. **Confirm test coverage exists.** If the code you're about to refactor isn't covered by tests, your first response is: *"No test coverage on `[file/area]`. Refactoring without tests is a regression-shipping machine. Either get tests in place first, or switch to /design and decide whether the risk is acceptable."*
+6. **Acknowledge the scope in one line.** *"Refactoring `parseCheckoutPayload` — 3 callers, covered by `checkout.test.ts`, contract `[[payment-api-contract]]`."*
 
 ## Scope
 

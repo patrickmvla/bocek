@@ -1,6 +1,54 @@
 # Vault Entry Format
 
-When writing a decision to the vault, use this structure. The format encodes what `/design` produces — every section corresponds to a step in *Operating at your ceiling*.
+When writing to the vault, use this structure. The path convention governs *where* entries live; the entry format governs *what* they contain. Read the path convention first — it's load-bearing for every other section below.
+
+## Path convention
+
+The vault is organized by feature, not flat. **Write entries into a feature-named subdirectory, never directly into `.bocek/vault/`.** A flat vault becomes unreadable past a handful of entries.
+
+```
+.bocek/
+  vault/
+    index.md                           ← top-level index, always at root
+    CONTEXT.md                         ← project-domain vocabulary, top-level meta
+                                          (see [[context-md-as-vocabulary]])
+    {feature}/                         ← one folder per feature
+      {slug}.md                        ← decisions, contracts, discoveries, gaps
+      .research/                       ← research-type entries, hidden from default ls
+                                          (see [[research-subfolder]])
+        {topic}-research.md
+    _shared/                           ← cross-cutting entries with no single primary feature
+      {slug}.md
+      .research/                       ← cross-feature research
+        {topic}-research.md
+```
+
+**Top-level vault meta — exempt from the feature-folder rule:**
+- `index.md` — entry map (auto-maintained per *Index update* below).
+- `CONTEXT.md` — project-domain vocabulary (per `[[context-md-as-vocabulary]]`).
+
+These two files sit at `.bocek/vault/` root. Every other markdown file lives in a feature folder or `_shared/`. Flat writes to `.bocek/vault/*.md` for anything other than `index.md` and `CONTEXT.md` are forbidden and code-enforced (per `[[mandatory-feature-folders]]`).
+
+**Research-type entries take a `.research/` subfolder** inside their feature folder (or inside `_shared/`). The dot-prefix hides them from default `ls` and from preflight's "recent entries" listing while keeping them wikilink-resolvable, grep-able, and `find`-discoverable. Per `[[research-subfolder]]`.
+
+**Picking the feature folder:**
+- Use the primary feature from the entry's frontmatter `features:` list (the first item).
+- If the entry genuinely spans multiple features and none is primary, write to `_shared/` (the underscore sorts it first in directory listings).
+- Don't invent feature names — the feature folder name should match feature names already used elsewhere in the project (file paths, git history, vault entries, conversation, and — when the project has one — `CONTEXT.md` term entries).
+
+**Picking the slug:**
+- Kebab-case, descriptive, NO feature prefix (the folder already conveys the feature).
+- For **decisions**: name what was chosen — `optimistic-locking.md`, `cart-expiry.md`.
+- For **contracts**: `api-contract.md`, `webhook-contract.md`, or `{specific-thing}-contract.md` if there are multiple.
+- For **research**: append `-research` and place under the `.research/` subfolder — `wallet/.research/stripe-idempotency-research.md`.
+- For **reviews**: `review-YYYY-MM-DD.md`.
+- For **discoveries**: `discovery-{what}.md`.
+- For **gap reports**: `gaps.md` per feature (append to the existing file when re-flagging) or `gaps-YYYY-MM-DD.md` when sessions are distinct.
+
+**Creating folders:**
+- If the `{feature}/` directory doesn't exist, create it before writing the entry. The enforcement hook allows `mkdir` and any write under `.bocek/`.
+- If the entry is research-type, also create the `.research/` subfolder.
+- If you're the first entry for a feature, you create the folder. No ceremony needed.
 
 ## Frontmatter
 
@@ -19,6 +67,8 @@ confidence: high | medium | low
 **related** — wikilinks to related vault entries (decisions cited, research consulted, contracts affected, idioms applied)
 **created** — date the entry was written (YYYY-MM-DD)
 **confidence** — overall confidence the decision will hold; per-claim confidence goes inline (see *Evidence labeling* below)
+
+For `research` type entries, add `provisional: true` when the *Triangulation* gate (in `research/research-format.md`) is not yet met.
 
 ## Body structure for decisions
 
@@ -116,40 +166,6 @@ Evidence classes (strongest to weakest):
 Untagged claims are assumed *production-cited / high* — only deviate when truthful. Bluffing
 *production-cited* on an inference is mode-collapse; the human should be able to trust the labels.
 
-## Path convention
-
-The vault is organized by feature, not flat. **Write entries into a feature-named subdirectory, never directly into `.bocek/vault/`.** A flat vault becomes unreadable past a handful of entries.
-
-```
-.bocek/
-  vault/
-    index.md                           ← top-level index, always at root
-    .compiled/                         ← gitignored, per-feature compiled context
-    {feature}/                         ← one folder per feature
-      {slug}.md                        ← the entry — slug is kebab-case, NO feature prefix
-      {another-slug}.md
-    _shared/                           ← cross-cutting entries with no single primary feature
-      {slug}.md
-```
-
-**Picking the feature folder:**
-- Use the primary feature from the entry's frontmatter `features:` list (the first item).
-- If the entry genuinely spans multiple features and none is primary, write to `_shared/` (the underscore sorts it first in directory listings).
-- Don't invent feature names — the feature folder name should match feature names already used elsewhere in the project (file paths, git history, vault entries, conversation).
-
-**Picking the slug:**
-- Kebab-case, descriptive, NO feature prefix (the folder already conveys the feature).
-- For decisions: name what was chosen — `optimistic-locking.md`, `cart-expiry.md`.
-- For contracts: `api-contract.md`, `webhook-contract.md`, or `{specific-thing}-contract.md` if there are multiple.
-- For research: append `-research` when the topic is primarily an investigation — `stripe-idempotency-research.md`.
-- For reviews: `review-YYYY-MM-DD.md`.
-- For discoveries: `discovery-{what}.md`.
-- For gap reports: `gaps.md` per feature (append to the existing file when re-flagging) or `gaps-YYYY-MM-DD.md` when sessions are distinct.
-
-**Creating the folder:**
-- If the `{feature}/` directory doesn't exist, create it before writing the entry. The enforcement hook allows `mkdir` and any write under `.bocek/`.
-- If you're the first entry for a feature, you create the folder. No ceremony needed.
-
 ## Index update
 
 After writing the vault entry, add a line to `.bocek/vault/index.md`:
@@ -172,6 +188,8 @@ After writing the vault entry, update `.bocek/state.md`:
 - Next: [next question to address]
 ```
 
+Overwrite on every checkpoint — state.md is current state, not history. A *Session history* section is allowed as a brief log; keep it short.
+
 ## Index initialization
 
 If `.bocek/vault/index.md` doesn't exist, create it:
@@ -183,3 +201,5 @@ vault_version: 2
 ```
 
 Then add the entry line below.
+
+For the `CONTEXT.md` format, see `references/shared/context-format.md`.

@@ -248,7 +248,7 @@ cmd_status() {
   local VAULT_DIR="$PROJECT_ROOT/.bocek/vault"
   if [ -d "$VAULT_DIR" ]; then
     local ENTRY_COUNT
-    ENTRY_COUNT=$(find "$VAULT_DIR" -name "*.md" -not -path "*/.compiled/*" | wc -l)
+    ENTRY_COUNT=$(find "$VAULT_DIR" -name "*.md" | wc -l)
     echo "Vault: $ENTRY_COUNT entries"
     if [ -f "$VAULT_DIR/index.md" ]; then
       local VERSION
@@ -416,6 +416,46 @@ vault_version: 2
 EOF
   fi
 
+  # Initialize CONTEXT.md if missing (per [[context-md-as-vocabulary]])
+  local CONTEXT_FILE="$PROJECT_ROOT/.bocek/vault/CONTEXT.md"
+  if [ ! -f "$CONTEXT_FILE" ]; then
+    cat > "$CONTEXT_FILE" <<EOF
+---
+vault_version: 2
+created: $TODAY
+---
+
+# ${NAME:-Project} — Domain Context
+
+<!-- Add project-specific domain terms here as they emerge.
+     See ~/.bocek/references/shared/context-format.md for the format.
+     This file is read on every primitive activation. -->
+
+## Language
+
+<!-- Example shape — replace with real terms as they emerge during /design or /research:
+
+**TermName:**
+One-sentence definition. What it IS, not what it does.
+→ see [[feature/slug]]
+_Avoid_: alternative-word-1, alternative-word-2
+-->
+
+## Relationships
+
+<!-- e.g. - A **Player** has zero or more **Wallets**
+         - A **Wallet** holds one **Currency** -->
+
+## Example dialogue
+
+<!-- A short conversation showing how the terms interact naturally. Two-to-four lines. -->
+
+## Flagged ambiguities
+
+<!-- Note here when a term is used ambiguously and which usage won. -->
+EOF
+  fi
+
   # Initialize state.md if missing
   local STATE_FILE="$PROJECT_ROOT/.bocek/state.md"
   if [ ! -f "$STATE_FILE" ]; then
@@ -443,6 +483,13 @@ EOF
 }
 
 cmd_vault_organize() {
+  local mode="loose"
+  case "${1:-}" in
+    --migrate-research) mode="research" ;;
+    "") ;;
+    *) echo "bocek: unknown 'vault organize' flag '${1:-}'. Try: --migrate-research" >&2; exit 1 ;;
+  esac
+
   local VAULT_DIR="$PROJECT_ROOT/.bocek/vault"
 
   if [ ! -d "$VAULT_DIR" ]; then
@@ -450,9 +497,14 @@ cmd_vault_organize() {
     exit 0
   fi
 
-  # Find loose entries (top-level .md files that aren't index.md)
+  if [ "$mode" = "research" ]; then
+    cmd_vault_organize_research
+    return
+  fi
+
+  # Find loose entries (top-level .md files that aren't index.md or CONTEXT.md)
   local LOOSE
-  LOOSE=$(find "$VAULT_DIR" -mindepth 1 -maxdepth 1 -type f -name "*.md" -not -name "index.md" -printf "%f\n" 2>/dev/null | sort)
+  LOOSE=$(find "$VAULT_DIR" -mindepth 1 -maxdepth 1 -type f -name "*.md" -not -name "index.md" -not -name "CONTEXT.md" -printf "%f\n" 2>/dev/null | sort)
 
   if [ -z "$LOOSE" ]; then
     echo "bocek: no loose entries in $VAULT_DIR — vault already follows the path convention"
@@ -542,6 +594,182 @@ cmd_vault_organize() {
   echo "Review .bocek/vault/index.md if any entries are listed by path rather than wikilink."
 }
 
+# Migrate type:research entries from flat feature-folder paths into .research/ subfolders
+# (per [[research-subfolder]]). Walks each feature folder, identifies entries with
+# `type: research` in frontmatter at depth 2, moves them into .research/ via `git mv`
+# when the repo tracks them, plain mv otherwise.
+cmd_vault_organize_research() {
+  local VAULT_DIR="$PROJECT_ROOT/.bocek/vault"
+
+  echo "=== Bocek Vault Organize — Research Subfolder Migration ==="
+  echo ""
+  echo "Scanning for type:research entries at flat feature-folder paths..."
+  echo ""
+
+  local moved=0
+  local skipped=0
+  local in_git=0
+  [ -d "$PROJECT_ROOT/.git" ] && in_git=1
+
+  while IFS= read -r feature_dir; do
+    [ -z "$feature_dir" ] && continue
+    local feature
+    feature=$(basename "$feature_dir")
+
+    while IFS= read -r entry; do
+      [ -z "$entry" ] && continue
+
+      # Skip if already in .research/
+      case "$entry" in
+        */.research/*) continue ;;
+      esac
+
+      # Extract type from frontmatter
+      local type
+      type=$(awk '/^---$/{if(c)exit;c=1;next} c && /^type:/{print $2; exit}' "$entry" 2>/dev/null | tr -d '[:space:]')
+
+      if [ "$type" = "research" ]; then
+        local target_dir="$feature_dir/.research"
+        local target_path="$target_dir/$(basename "$entry")"
+
+        if [ -e "$target_path" ]; then
+          echo "  $feature/$(basename "$entry"): target already exists at $feature/.research/$(basename "$entry") — skipping"
+          skipped=$((skipped + 1))
+          continue
+        fi
+
+        mkdir -p "$target_dir"
+
+        local rel_src="${entry#"$PROJECT_ROOT"/}"
+        local rel_dst="${target_path#"$PROJECT_ROOT"/}"
+
+        if [ "$in_git" -eq 1 ] && git -C "$PROJECT_ROOT" ls-files --error-unmatch "$rel_src" >/dev/null 2>&1; then
+          git -C "$PROJECT_ROOT" mv "$rel_src" "$rel_dst" 2>/dev/null || mv "$entry" "$target_path"
+        else
+          mv "$entry" "$target_path"
+        fi
+
+        echo "  $feature/$(basename "$entry") → $feature/.research/$(basename "$entry")"
+        moved=$((moved + 1))
+      fi
+    done < <(find "$feature_dir" -mindepth 1 -maxdepth 1 -type f -name "*.md" 2>/dev/null)
+  done < <(find "$VAULT_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
+
+  echo ""
+  echo "bocek: $moved type:research entries migrated into .research/; $skipped skipped"
+  echo ""
+  echo "Wikilinks ([[name]]) still resolve — filename-based, not path-based."
+}
+
+# Regenerate .bocek/vault/index.md from per-entry summaries per [[index-regen-from-frontmatter]].
+# Resolution order for each entry's summary: frontmatter `description:` → first H1 heading → slug-as-title-case.
+# Hand-edits to index.md are clobbered by the next rebuild — the script is the source of truth.
+# Usage: bocek vault index [--rebuild | --check]
+cmd_vault_index_rebuild() {
+  local mode="rebuild"
+  case "${1:-}" in
+    --rebuild|"") mode="rebuild" ;;
+    --check) mode="check" ;;
+    *) echo "bocek: unknown 'vault index' flag '${1:-}'. Try: --rebuild or --check" >&2; exit 1 ;;
+  esac
+
+  local VAULT_DIR="$PROJECT_ROOT/.bocek/vault"
+
+  if [ ! -d "$VAULT_DIR" ]; then
+    echo "bocek: no vault at $VAULT_DIR — nothing to rebuild" >&2
+    exit 0
+  fi
+
+  # Project name from CONTEXT.md H1 if present, else "Vault"
+  local PROJECT_NAME="Vault"
+  if [ -f "$VAULT_DIR/CONTEXT.md" ]; then
+    local extracted
+    extracted=$(awk '/^# /{sub(/^# /, ""); sub(/ — .*/, ""); print; exit}' "$VAULT_DIR/CONTEXT.md" 2>/dev/null)
+    [ -n "$extracted" ] && PROJECT_NAME="$extracted"
+  fi
+
+  local tmpfile
+  tmpfile=$(mktemp)
+  trap "rm -f '$tmpfile'" RETURN
+
+  printf -- '---\nvault_version: 2\n---\n\n# %s Index\n' "$PROJECT_NAME" > "$tmpfile"
+
+  local missing_desc=0
+  local missing_list=""
+  local current_feature=""
+
+  process_entry() {
+    local entry="$1"
+    local rel="${entry#"$VAULT_DIR"/}"
+    local feature="${rel%%/*}"
+
+    if [ "$feature" != "$current_feature" ]; then
+      printf -- '\n## %s\n\n' "$feature" >> "$tmpfile"
+      current_feature="$feature"
+    fi
+
+    local type
+    type=$(awk '/^---$/{if(c)exit;c=1;next} c && /^type:/{print $2;exit}' "$entry" 2>/dev/null | tr -d '[:space:]')
+    [ -z "$type" ] && type="?"
+
+    local desc
+    desc=$(awk '/^---$/{if(c)exit;c=1;next} c && /^description:/{sub(/^description:[[:space:]]*/, ""); print; exit}' "$entry" 2>/dev/null)
+    if [ -z "$desc" ]; then
+      missing_desc=$((missing_desc + 1))
+      missing_list+="  $entry"$'\n'
+      desc=$(awk '/^# /{sub(/^# /, ""); print; exit}' "$entry" 2>/dev/null)
+      if [ -z "$desc" ]; then
+        local base
+        base=$(basename "$entry" .md)
+        desc=$(printf '%s' "$base" | sed 's/-/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2))} 1')
+      fi
+    fi
+
+    if [ ${#desc} -gt 200 ]; then
+      desc="${desc:0:197}..."
+    fi
+
+    local wikilink
+    wikilink=$(basename "$entry" .md)
+
+    printf -- '- [[%s]] — type: %s — %s\n' "$wikilink" "$type" "$desc" >> "$tmpfile"
+  }
+
+  # _shared/ first (with .research/ sub-entries)
+  if [ -d "$VAULT_DIR/_shared" ]; then
+    while IFS= read -r entry; do
+      [ -z "$entry" ] && continue
+      process_entry "$entry"
+    done < <(find "$VAULT_DIR/_shared" -mindepth 1 -maxdepth 2 -type f -name "*.md" 2>/dev/null | sort)
+  fi
+
+  # Then other feature folders, alphabetically
+  while IFS= read -r feature_dir; do
+    [ -z "$feature_dir" ] && continue
+    while IFS= read -r entry; do
+      [ -z "$entry" ] && continue
+      process_entry "$entry"
+    done < <(find "$feature_dir" -mindepth 1 -maxdepth 2 -type f -name "*.md" 2>/dev/null | sort)
+  done < <(find "$VAULT_DIR" -mindepth 1 -maxdepth 1 -type d -not -name "_shared" 2>/dev/null | sort)
+
+  if [ "$mode" = "check" ]; then
+    echo "=== Bocek Vault Index — Check (dry run) ==="
+    echo ""
+    cat "$tmpfile"
+    if [ "$missing_desc" -gt 0 ]; then
+      printf '\nWARNING: %d entries lack `description:` frontmatter (fell back to H1 heading or slug):\n%s' \
+        "$missing_desc" "$missing_list"
+    fi
+  else
+    cp "$tmpfile" "$VAULT_DIR/index.md"
+    echo "bocek: vault index rebuilt at $VAULT_DIR/index.md"
+    if [ "$missing_desc" -gt 0 ]; then
+      echo "       $missing_desc entries lack 'description:' frontmatter (fell back to H1 heading or slug)."
+      echo "       Run 'bocek vault index --check' to see which entries."
+    fi
+  fi
+}
+
 # --- Usage ---
 usage() {
   echo "Usage: bocek <command>"
@@ -565,8 +793,9 @@ case "${1:-}" in
   bootstrap) cmd_bootstrap ;;
   vault)
     case "${2:-}" in
-      organize|organise) cmd_vault_organize ;;
-      *) echo "bocek: unknown vault subcommand '${2:-}'. Try: bocek vault organize" >&2; exit 1 ;;
+      organize|organise) cmd_vault_organize "${3:-}" ;;
+      index) cmd_vault_index_rebuild "${3:-}" ;;
+      *) echo "bocek: unknown vault subcommand '${2:-}'. Try: bocek vault organize [--migrate-research] | bocek vault index [--rebuild|--check]" >&2; exit 1 ;;
     esac
     ;;
   *)         usage; exit 1 ;;

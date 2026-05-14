@@ -46,20 +46,35 @@ find_project_root() {
 
 PROJECT_ROOT=$(find_project_root "${CLAUDE_PROJECT_DIR:-$PWD}")
 
-echo "=== Bocek Preflight — ${MODE} ==="
-
-# --- 1. Mode transition ---
+# --- 0. Capture previous mode, then write current mode BEFORE any stdout echo. ---
+# Per [[preflight-sigpipe-fix]]: the mode-write side effect must complete before any
+# echo, so that stdout truncation by the caller (e.g. `| head -8`) under
+# `set -euo pipefail` cannot SIGPIPE-abort the script before the write executes.
 MODE_FILE="$PROJECT_ROOT/.bocek/mode"
+PREVIOUS_MODE=""
 if [ -f "$MODE_FILE" ]; then
   PREVIOUS_MODE=$(<"$MODE_FILE")
   PREVIOUS_MODE="${PREVIOUS_MODE//[[:space:]]/}"
-  if [ "$PREVIOUS_MODE" = "$MODE" ]; then
-    echo "Mode: $MODE (unchanged)"
-  else
-    echo "Mode: $PREVIOUS_MODE → $MODE"
-  fi
-else
+fi
+mkdir -p "$PROJECT_ROOT/.bocek"
+echo "$MODE" > "$MODE_FILE"
+# Read back — silent failure here would let the enforcement hook read a stale mode.
+WRITTEN=$(<"$MODE_FILE")
+WRITTEN="${WRITTEN//[[:space:]]/}"
+if [ "$WRITTEN" != "$MODE" ]; then
+  echo "preflight: mode write to $MODE_FILE did not take (expected '$MODE', got '$WRITTEN')" >&2
+  exit 1
+fi
+
+echo "=== Bocek Preflight — ${MODE} ==="
+
+# --- 1. Mode transition (display only — write already happened in section 0) ---
+if [ -z "$PREVIOUS_MODE" ]; then
   echo "Mode: (no prior) → $MODE"
+elif [ "$PREVIOUS_MODE" = "$MODE" ]; then
+  echo "Mode: $MODE (unchanged)"
+else
+  echo "Mode: $PREVIOUS_MODE → $MODE"
 fi
 
 # --- 2. Last checkpoint ---
@@ -78,7 +93,7 @@ fi
 VAULT_DIR="$PROJECT_ROOT/.bocek/vault"
 ENTRY_COUNT=0
 if [ -d "$VAULT_DIR" ]; then
-  ENTRY_COUNT=$(find "$VAULT_DIR" -maxdepth 4 -name "*.md" -not -path "*/.compiled/*" -not -name "index.md" 2>/dev/null | wc -l | tr -d ' ')
+  ENTRY_COUNT=$(find "$VAULT_DIR" -maxdepth 4 -name "*.md" -not -name "index.md" -not -name "CONTEXT.md" 2>/dev/null | wc -l | tr -d ' ')
   echo ""
   echo "Vault: $ENTRY_COUNT entries at $VAULT_DIR"
   if [ -f "$VAULT_DIR/index.md" ]; then
@@ -86,11 +101,27 @@ if [ -d "$VAULT_DIR" ]; then
   else
     echo "  no index.md — create one when first entry is written"
   fi
+  if [ -f "$VAULT_DIR/CONTEXT.md" ]; then
+    echo "  CONTEXT.md present — project-domain vocabulary, read on every primitive activation"
+  else
+    echo "  no CONTEXT.md — create one to capture project-specific vocabulary (see [[context-md-as-vocabulary]])"
+  fi
   # Feature folders (per Path convention: vault/{feature}/{slug}.md)
-  FEATURE_DIRS=$(find "$VAULT_DIR" -mindepth 1 -maxdepth 1 -type d -not -name ".compiled" -printf "%f\n" 2>/dev/null | sort)
+  FEATURE_DIRS=$(find "$VAULT_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" 2>/dev/null | sort)
   if [ -n "$FEATURE_DIRS" ]; then
     echo "  feature folders:"
-    printf '    %s/\n' $FEATURE_DIRS
+    while IFS= read -r fd; do
+      [ -z "$fd" ] && continue
+      # Count entries directly in feature folder (depth 2 from vault root)
+      direct=$(find "$VAULT_DIR/$fd" -mindepth 1 -maxdepth 1 -type f -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
+      # Count .research/ entries inside the feature folder (depth 3 from vault root)
+      research=$(find "$VAULT_DIR/$fd/.research" -mindepth 1 -maxdepth 1 -type f -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
+      if [ "$research" -gt 0 ]; then
+        printf '    %s/ (%s; +%s in .research)\n' "$fd" "$direct" "$research"
+      else
+        printf '    %s/ (%s)\n' "$fd" "$direct"
+      fi
+    done <<< "$FEATURE_DIRS"
   fi
   # Loose entries directly in vault/ (path-convention violation — flag for cleanup)
   LOOSE=$(find "$VAULT_DIR" -mindepth 1 -maxdepth 1 -type f -name "*.md" -not -name "index.md" -printf "%f\n" 2>/dev/null | sort)
@@ -98,8 +129,8 @@ if [ -d "$VAULT_DIR" ]; then
     echo "  ⚠ loose entries (should be in {feature}/ folders per vault path convention):"
     printf '    %s\n' $LOOSE
   fi
-  # Recent entries across all feature folders
-  RECENT=$(find "$VAULT_DIR" -mindepth 2 -maxdepth 2 -type f -name "*.md" -not -path "*/.compiled/*" -printf "%T@ %P\n" 2>/dev/null | sort -rn | head -5 | awk '{print $2}')
+  # Recent entries across all feature folders (depth 2: direct entries; depth 3: .research/ entries)
+  RECENT=$(find "$VAULT_DIR" -mindepth 2 -maxdepth 3 -type f -name "*.md" -printf "%T@ %P\n" 2>/dev/null | sort -rn | head -5 | awk '{print $2}')
   if [ -n "$RECENT" ]; then
     echo "  recent entries:"
     printf '    %s\n' $RECENT
@@ -284,6 +315,11 @@ case "$MODE" in
     ;;
 esac
 
+# CONTEXT.md is eager-read for every primitive activation per [[context-md-as-vocabulary]]
+if [ -f "$VAULT_DIR/CONTEXT.md" ] && [ "$MODE" != "idle" ]; then
+  echo "  $VAULT_DIR/CONTEXT.md  (project-domain vocabulary — read on every primitive activation)"
+fi
+
 # --- 6b. Project state classification (greenfield / brownfield-with-vault / brownfield-no-vault) ---
 # Code count: source files in common locations, excluding vendored/build/dot dirs
 CODE_COUNT=$(find "$PROJECT_ROOT" \
@@ -305,17 +341,6 @@ else
   echo "Project state: greenfield ($CODE_COUNT source files, 0 vault entries)"
   echo "  First decision is *project shape*. Run \`bocek bootstrap\` for an interactive interview,"
   echo "  or read ~/.bocek/references/shared/onboarding.md for the question set."
-fi
-
-# --- 7. Write the mode (side effect) ---
-mkdir -p "$PROJECT_ROOT/.bocek"
-echo "$MODE" > "$MODE_FILE"
-# Read back — silent failure here would let the enforcement hook read a stale mode.
-WRITTEN=$(<"$MODE_FILE")
-WRITTEN="${WRITTEN//[[:space:]]/}"
-if [ "$WRITTEN" != "$MODE" ]; then
-  echo "preflight: mode write to $MODE_FILE did not take (expected '$MODE', got '$WRITTEN')" >&2
-  exit 1
 fi
 
 echo ""

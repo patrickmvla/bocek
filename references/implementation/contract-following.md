@@ -5,7 +5,7 @@ The cycle for every function you implement: quote → implement → verify → a
 ## The cycle
 
 **1. Quote the contract:**
-Before writing code, state what the vault requires. Pull the exact constraint from the compiled vault or the human vault entry.
+Before writing code, state what the vault requires. Pull the exact constraint from the relevant vault entry under `.bocek/vault/{feature}/`.
 
 ```
 Per [[payment-api-contract]]:

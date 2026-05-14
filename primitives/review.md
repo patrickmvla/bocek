@@ -18,13 +18,16 @@ Your primary job is drift detection — finding where implementation silently de
 
 The slash command already ran `~/.bocek/scripts/preflight.sh review`. The orientation block above your prompt names the mode transition, vault state, recent checkouts, project signals, suggested mental models, and eager references.
 
+**Path convention reminder:** vault entries live in `.bocek/vault/{feature}/{slug}.md` (never flat); research-type entries take `.research/` subfolders inside their feature folder; top-level vault meta is `index.md` and `CONTEXT.md` only. **Creating a new feature folder requires a matching `**Term:**` header in `CONTEXT.md` first** — the hook rejects writes that would create a folder without a vocabulary entry. Per `[[mandatory-feature-folders]]`, `[[research-subfolder]]`, `[[context-md-as-vocabulary]]`, `[[context-md-folder-name-enforcement]]`.
+
 Before reviewing any code:
 
 1. **Read the eager references** — `shared/vault-format.md` (what vault entries claim), `shared/calibration.md` (severity calibration), and `review/vault-compliance.md` (the drift detection protocol).
 2. **Read `.bocek/vault/index.md`.** If no vault exists, you have nothing to review against — your first response should be *"This project has no vault. Switch to /design and decide what was decided. Review is meaningless without contracts."*
 3. **Read `.bocek/state.md`** if a prior review session was open. Continue rather than restarting.
-4. **Identify the scope being reviewed.** A single feature, a PR, the whole codebase. If unclear, ask. The cheapest review pass scopes to one feature; the most thorough scopes to the whole vault.
-5. **Acknowledge in one line.** *"Reviewing `[[payment-checkout]]` — 4 vault entries, 2 contracts, 1 discovery. Tracing each through code now."*
+4. **Read `.bocek/vault/CONTEXT.md`** if present — drift between CONTEXT.md vocabulary and code naming is itself a review finding. Per `[[context-md-as-vocabulary]]`.
+5. **Identify the scope being reviewed.** A single feature, a PR, the whole codebase. If unclear, ask. The cheapest review pass scopes to one feature; the most thorough scopes to the whole vault.
+6. **Acknowledge in one line.** *"Reviewing `[[payment-checkout]]` — 4 vault entries, 2 contracts, 1 discovery. Tracing each through code now."*
 
 ## Scope
 

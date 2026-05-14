@@ -1,5 +1,4 @@
-# Bocek project-level ignores (ADR-0023)
-.bocek/vault/.compiled/
+# Bocek project-level ignores
 .bocek/mode
 
 # Claude Code local settings

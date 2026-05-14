@@ -19,13 +19,16 @@ Default register is **collaborative**: you bring substance (codebase reading, do
 
 The slash command already ran `~/.bocek/scripts/preflight.sh design`. The orientation block above your prompt names the mode transition, vault state, recent checkouts, project signals, suggested mental models, and eager references.
 
+**Path convention reminder:** vault entries live in `.bocek/vault/{feature}/{slug}.md` (never flat); research-type entries take `.research/` subfolders inside their feature folder; top-level vault meta is `index.md` and `CONTEXT.md` only. **Creating a new feature folder requires a matching `**Term:**` header in `CONTEXT.md` first** — the hook rejects writes that would create a folder without a vocabulary entry. Per `[[mandatory-feature-folders]]`, `[[research-subfolder]]`, `[[context-md-as-vocabulary]]`, `[[context-md-folder-name-enforcement]]`.
+
 Before responding to the human:
 
 1. **Read the eager references** named in the preflight (`shared/vault-format.md`, `shared/calibration.md`). Do not skip — vault-format defines how you must structure entries; calibration defines how hard to push back.
 2. **Read `.bocek/vault/index.md`** if the preflight reported entries. Don't design over decisions that already exist.
 3. **Read `.bocek/state.md`** if the preflight showed it. Continuity matters.
-4. **Acknowledge in one line.** Quote what you found: e.g. *"Picking up `pricing-engine` — 2 decisions vaulted, last touched 3 days ago. Open question: idempotency strategy."* If nothing exists yet, say so.
-5. **State the first decision you'll attack.** Don't wait to be told what to design.
+4. **Read `.bocek/vault/CONTEXT.md`** if present — project-domain vocabulary that constrains how decisions, features, and entries should be named. Per `[[context-md-as-vocabulary]]`.
+5. **Acknowledge in one line.** Quote what you found: e.g. *"Picking up `pricing-engine` — 2 decisions vaulted, last touched 3 days ago. Open question: idempotency strategy."* If nothing exists yet, say so.
+6. **State the first decision you'll attack.** Don't wait to be told what to design.
 
 If the preflight suggested a mental model and the current decision touches that domain, read it before forming positions.
 
@@ -202,7 +205,9 @@ You won't read every reference every turn. Read the one whose trigger fires *now
 
 ## Vault writes
 
-When a decision survives challenge, write it to `.bocek/vault/{feature}/{slug}.md` per the *Path convention* in `references/shared/vault-format.md` — `{feature}` is the primary feature folder (e.g. `checkout/`, `auth/`, `payments/`), `{slug}` is a kebab-case decision name with no feature prefix. Example: `.bocek/vault/checkout/optimistic-locking.md`. Create the feature folder if it's the first entry for that feature. Update `.bocek/vault/index.md` with the new entry under the feature heading. Checkpoint to `.bocek/state.md` after every resolved decision — capture: feature, decisions resolved this session, decisions still open, sources cited.
+**Vault lazily — wait until the decision is concrete enough to implement without follow-up.** Speculative directions and pre-decisions stay in conversation, not in the vault (per `[[lazy-vault-write]]`).
+
+When a decision survives challenge AND is concrete enough to implement, write it to `.bocek/vault/{feature}/{slug}.md` per the *Path convention* in `references/shared/vault-format.md` — `{feature}` is the primary feature folder (e.g. `checkout/`, `auth/`, `payments/`), `{slug}` is a kebab-case decision name with no feature prefix. Example: `.bocek/vault/checkout/optimistic-locking.md`. Create the feature folder if it's the first entry for that feature. Update `.bocek/vault/index.md` with the new entry under the feature heading. Checkpoint to `.bocek/state.md` after every resolved decision — capture: feature, decisions resolved this session, decisions still open, sources cited.
 
 ## Handoff
 

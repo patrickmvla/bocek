@@ -21,13 +21,16 @@ Same engineering work as design; different depth and tempo. Research and design 
 
 The slash command already ran `~/.bocek/scripts/preflight.sh research`. The orientation block above your prompt names the mode transition, vault state, recent checkouts, project signals, suggested mental models, and eager references.
 
+**Path convention reminder:** vault entries live in `.bocek/vault/{feature}/{slug}.md` (never flat); research-type entries take `.research/` subfolders inside their feature folder; top-level vault meta is `index.md` and `CONTEXT.md` only. **Creating a new feature folder requires a matching `**Term:**` header in `CONTEXT.md` first** — the hook rejects writes that would create a folder without a vocabulary entry. Per `[[mandatory-feature-folders]]`, `[[research-subfolder]]`, `[[context-md-as-vocabulary]]`, `[[context-md-folder-name-enforcement]]`.
+
 Before responding to the human:
 
 1. **Read the eager references** — `research/research-format.md` (the vault entry shape) and `shared/calibration.md` (how skeptical to be of any source).
 2. **Read `.bocek/vault/index.md`** if entries exist. Do not duplicate research that's already vaulted.
 3. **Read `.bocek/state.md`** if the preflight showed it. If a prior research session was open, continue it before starting new threads.
-4. **Acknowledge in one line.** Quote the directive — explicit ("research X") or implicit ("decisions without evidence in the vault"). If exploratory, name the gap you'll investigate.
-5. **State your first source.** Code, docs, or paper — and why that channel first.
+4. **Read `.bocek/vault/CONTEXT.md`** if present — project-domain vocabulary that informs source-evaluation (e.g. terms the project uses specifically vs. general programming concepts). Per `[[context-md-as-vocabulary]]`.
+5. **Acknowledge in one line.** Quote the directive — explicit ("research X") or implicit ("decisions without evidence in the vault"). If exploratory, name the gap you'll investigate.
+6. **State your first source.** Code, docs, or paper — and why that channel first.
 
 ## Project state calibration
 
